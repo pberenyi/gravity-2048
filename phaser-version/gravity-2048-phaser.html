@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Gravity 2048 — Phaser Version</title>
-    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.js" integrity="sha256-SUsGCepd5yz53CJAE0MkfQGpVapI+SZw8SGGgpZBg4E=" crossorigin="anonymous"></script>
     <style>
         :root {
             --gap: 4px;
@@ -782,16 +782,11 @@ class Gravity2048Scene extends Phaser.Scene {
     }
 
     create() {
-        // Get CSS cell size (wait for it to be calculated)
-        const style = getComputedStyle(document.documentElement);
-        const cellSizeStr = style.getPropertyValue('--cell').trim();
-        const gapStr = style.getPropertyValue('--gap').trim();
-        
-        this.cellSize = parseInt(cellSizeStr) || 40; // fallback to 40px
-        const gap = parseInt(gapStr) || 4;
+        this.cellSize = Gravity2048Scene.cellSize;
+        this.gap = Gravity2048Scene.gap;
 
-        this.boardOffsetX = 9;
-        this.boardOffsetY = 9;
+        this.boardOffsetX = 0;
+        this.boardOffsetY = 0;
 
         // Register callbacks
         this.logic.on('render', () => this.render());
@@ -826,7 +821,11 @@ class Gravity2048Scene extends Phaser.Scene {
     }
 
     render() {
-        Object.values(this.sprites).forEach(sprite => sprite.destroy());
+        Object.values(this.sprites).forEach(sprite => {
+            this.tweens.killTweensOf(sprite);
+            sprite.setVisible(false);
+            sprite.destroy();
+        });
         this.sprites = {};
 
         this.drawBackgroundGrid();
@@ -841,34 +840,32 @@ class Gravity2048Scene extends Phaser.Scene {
 
         if (this.logic.current) {
             for (const [x, y] of this.logic.cells(this.logic.current)) {
-                this.drawTile(x, y, this.logic.current.value, true);
+                this.drawTile(x, y, this.logic.current.value, true, 'f');
             }
         }
     }
 
     drawBackgroundGrid() {
-        const gap = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gap')) || 4;
+        const gap = this.gap;
         const boardWidth = this.cellSize * BOARD_WIDTH + (BOARD_WIDTH - 1) * gap;
         const boardHeight = this.cellSize * BOARD_HEIGHT + (BOARD_HEIGHT - 1) * gap;
 
-        const graphics = this.make.graphics({ x: 0, y: 0, add: false });
-        graphics.fillStyle(0x0e1118, 1);
-        graphics.fillRect(
-            this.boardOffsetX,
-            this.boardOffsetY,
-            boardWidth,
-            boardHeight
-        );
-        graphics.generateTexture('gridBg', boardWidth, boardHeight);
-        graphics.destroy();
+        if (!this.textures.exists('gridBg')) {
+            const graphics = this.make.graphics({ x: 0, y: 0, add: false });
+            graphics.fillStyle(0x0e1118, 1);
+            graphics.fillRect(0, 0, boardWidth, boardHeight);
+            graphics.generateTexture('gridBg', boardWidth, boardHeight);
+            graphics.destroy();
+        }
 
         const bg = this.add.image(this.boardOffsetX, this.boardOffsetY, 'gridBg');
         bg.setOrigin(0, 0);
         bg.setDepth(-1);
+        this.sprites['__bg'] = bg;
     }
 
-    drawTile(x, y, value, isFalling = false) {
-        const gap = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gap')) || 4;
+    drawTile(x, y, value, isFalling = false, keyPrefix = '') {
+        const gap = this.gap;
         const posX = this.boardOffsetX + x * (this.cellSize + gap);
         const posY = this.boardOffsetY + y * (this.cellSize + gap);
 
@@ -892,7 +889,7 @@ class Gravity2048Scene extends Phaser.Scene {
             text.setAlpha(0.8);
         }
 
-        const key = `${x},${y}`;
+        const key = `${keyPrefix}${x},${y}`;
         this.sprites[key] = tile;
         this.sprites[`${key}-text`] = text;
     }
@@ -910,16 +907,22 @@ class Gravity2048Scene extends Phaser.Scene {
     }
 
     animateClearRows(rows) {
+        const gen = this.logic.generation;
         rows.forEach(y => {
             for (let x = 0; x < BOARD_WIDTH; x++) {
                 const key = `${x},${y}`;
-                if (this.sprites[key]) {
+                const tile = this.sprites[key];
+                const text = this.sprites[`${key}-text`];
+                delete this.sprites[key];
+                delete this.sprites[`${key}-text`];
+                if (tile) {
                     this.tweens.add({
-                        targets: [this.sprites[key], this.sprites[`${key}-text`]],
+                        targets: [tile, text],
                         scale: 0.2,
                         alpha: 0,
                         duration: ANIMATION_TIMINGS.CLEAR,
-                        ease: 'Quad.easeIn'
+                        ease: 'Quad.easeIn',
+                        onComplete: () => { tile.destroy(); text?.destroy(); }
                     });
                 }
             }
@@ -966,11 +969,27 @@ class Gravity2048Scene extends Phaser.Scene {
 }
 
 // ========== Phaser Config ==========
+(function () {
+    // Read actual rendered cell size the same way the original does:
+    // inject a temporary element, measure it, then remove it.
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;visibility:hidden;width:var(--cell);height:var(--cell)';
+    document.body.appendChild(probe);
+    const cell = probe.offsetWidth || 40;
+    const gap = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gap')) || 4;
+    document.body.removeChild(probe);
+
+    Gravity2048Scene.cellSize = cell;
+    Gravity2048Scene.gap = gap;
+    Gravity2048Scene.boardWidth  = cell * BOARD_WIDTH  + (BOARD_WIDTH  - 1) * gap;
+    Gravity2048Scene.boardHeight = cell * BOARD_HEIGHT + (BOARD_HEIGHT - 1) * gap;
+})();
+
 const config = {
     type: Phaser.AUTO,
     parent: 'game',
-    width: 340,
-    height: 740,
+    width: Gravity2048Scene.boardWidth,
+    height: Gravity2048Scene.boardHeight,
     scene: Gravity2048Scene,
     render: {
         pixelArt: true,
@@ -980,14 +999,18 @@ const config = {
 
 const game = new Phaser.Game(config);
 
-// Restart button handlers
-document.getElementById('restart').addEventListener('click', () => {
-    game.scene.scenes[0].logic.newGame();
-});
+function restartGame() {
+    document.getElementById('gameover').classList.remove('show');
+    const scene = game.scene.scenes[0];
+    scene.tweens.killAll();
+    Object.values(scene.sprites).forEach(s => { s.setVisible(false); s.destroy(); });
+    scene.sprites = {};
+    scene.logic.newGame();
+    scene.render();
+}
 
-document.getElementById('restartOverlay').addEventListener('click', () => {
-    game.scene.scenes[0].logic.newGame();
-});
+document.getElementById('restart').addEventListener('click', restartGame);
+document.getElementById('restartOverlay').addEventListener('click', restartGame);
 </script>
 </body>
 </html>
