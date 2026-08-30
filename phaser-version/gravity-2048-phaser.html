@@ -469,7 +469,7 @@ class GameLogic {
 class Gravity2048Scene extends Phaser.Scene {
     constructor() {
         super({ key: 'Gravity2048' });
-        this.game = new GameLogic();
+        this.logic = new GameLogic();
         this.sprites = {}; // { 'x,y': sprite }
         this.cellSize = 0;
         this.boardOffsetX = 0;
@@ -484,35 +484,35 @@ class Gravity2048Scene extends Phaser.Scene {
         this.boardOffsetY = 20;
 
         // Register game callbacks
-        this.game.on('render', () => this.render());
-        this.game.on('spawn', (type, value) => this.showNextPreview(type, value));
-        this.game.on('merge', (x, y, value) => this.animateMerge(x, y, value));
-        this.game.on('clearRows', (rows) => this.animateClearRows(rows));
-        this.game.on('scoreUpdated', (score) => this.updateScoreUI(score));
-        this.game.on('bestUpdated', (best) => this.updateBestUI(best));
-        this.game.on('gameOver', (score, best) => this.showGameOver(score, best));
-        this.game.on('cascade', (count) => this.showCascadeMessage(count));
+        this.logic.on('render', () => this.render());
+        this.logic.on('spawn', (type, value) => this.showNextPreview(type, value));
+        this.logic.on('merge', (x, y, value) => this.animateMerge(x, y, value));
+        this.logic.on('clearRows', (rows) => this.animateClearRows(rows));
+        this.logic.on('scoreUpdated', (score) => this.updateScoreUI(score));
+        this.logic.on('bestUpdated', (best) => this.updateBestUI(best));
+        this.logic.on('gameOver', (score, best) => this.showGameOver(score, best));
+        this.logic.on('cascade', (count) => this.showCascadeMessage(count));
 
         // Input handling
         this.input.keyboard.on('keydown', (e) => this.handleKeyPress(e));
 
         // Start game
-        this.game.newGame();
-        this.updateScoreUI(this.game.score);
-        this.updateBestUI(this.game.best);
+        this.logic.newGame();
+        this.updateScoreUI(this.logic.score);
+        this.updateBestUI(this.logic.best);
     }
 
     handleKeyPress(event) {
         const key = event.key.toLowerCase();
-        if (key === 'arrowleft') this.game.move(-1, 0);
-        else if (key === 'arrowright') this.game.move(1, 0);
-        else if (key === 'arrowdown') this.game.move(0, 1);
-        else if (key === 'arrowup' || key === 'x') this.game.rotate(1);
-        else if (key === 'z') this.game.rotate(-1);
+        if (key === 'arrowleft') this.logic.move(-1, 0);
+        else if (key === 'arrowright') this.logic.move(1, 0);
+        else if (key === 'arrowdown') this.logic.move(0, 1);
+        else if (key === 'arrowup' || key === 'x') this.logic.rotate(1);
+        else if (key === 'z') this.logic.rotate(-1);
         else if (key === ' ') {
             event.preventDefault();
-            this.game.hardDrop();
-        } else if (key === 'r') this.game.newGame();
+            this.logic.hardDrop();
+        } else if (key === 'r') this.logic.newGame();
     }
 
     render() {
@@ -526,16 +526,16 @@ class Gravity2048Scene extends Phaser.Scene {
         // Draw settled tiles
         for (let y = 0; y < BOARD_HEIGHT; y++) {
             for (let x = 0; x < BOARD_WIDTH; x++) {
-                if (this.game.grid[y][x] !== null) {
-                    this.drawTile(x, y, this.game.grid[y][x]);
+                if (this.logic.grid[y][x] !== null) {
+                    this.drawTile(x, y, this.logic.grid[y][x]);
                 }
             }
         }
 
         // Draw falling piece
-        if (this.game.current) {
-            for (const [x, y] of this.game.cells(this.game.current)) {
-                this.drawTile(x, y, this.game.current.value, true);
+        if (this.logic.current) {
+            for (const [x, y] of this.logic.cells(this.logic.current)) {
+                this.drawTile(x, y, this.logic.current.value, true);
             }
         }
     }
