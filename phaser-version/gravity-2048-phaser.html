@@ -15,33 +15,180 @@
             background: #11131a;
             font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
             min-height: 100dvh;
+            gap: 20px;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            width: 100%;
+        }
+        h1 {
+            color: #f4f5f7;
+            font-size: 28px;
+            font-weight: 700;
+            text-align: center;
+            margin: 0;
+        }
+        .game-wrapper {
+            display: flex;
+            gap: 30px;
+            justify-content: center;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            width: 100%;
         }
         #game {
             border: 2px solid #343b4c;
             border-radius: 15px;
             box-shadow: 0 20px 60px #0008;
+            flex-shrink: 0;
         }
-        .ui {
-            position: absolute;
-            top: 20px;
-            left: 20px;
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+            min-width: 200px;
+        }
+        .ui-section {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid #343b4c;
+            border-radius: 10px;
+            padding: 15px;
+        }
+        .score-section {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .score-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .score-label {
+            color: #aeb4c2;
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .score-value {
             color: #f4f5f7;
-            font-weight: bold;
-            z-index: 10;
+            font-size: 24px;
+            font-weight: 700;
         }
-        .score { font-size: 18px; margin-bottom: 8px; }
-        .best { font-size: 14px; color: #aeb4c2; }
+        .next-section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .next-label {
+            color: #aeb4c2;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        #nextPreview {
+            background: #0a0d13;
+            border: 1px solid #1f2937;
+            border-radius: 8px;
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .help-section {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .help-title {
+            color: #aeb4c2;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .help-text {
+            color: #cbd5e1;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .key {
+            display: inline-block;
+            background: #1f2937;
+            border: 1px solid #374151;
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-family: monospace;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        @media (max-width: 768px) {
+            .game-wrapper {
+                flex-direction: column;
+                gap: 20px;
+            }
+            .sidebar {
+                width: 100%;
+                max-width: 100%;
+                flex-direction: row;
+                flex-wrap: wrap;
+                gap: 15px;
+                justify-content: center;
+            }
+            .ui-section {
+                flex: 1;
+                min-width: 150px;
+            }
+            h1 {
+                font-size: 24px;
+            }
+        }
     </style>
 </head>
 <body>
-<div class="ui">
-    <div class="score">Score: <span id="score">0</span></div>
-    <div class="best">Best: <span id="best">0</span></div>
+<div class="container">
+    <h1>Gravity 2048</h1>
+    <div class="game-wrapper">
+        <div id="game"></div>
+        <div class="sidebar">
+            <div class="ui-section score-section">
+                <div class="score-item">
+                    <span class="score-label">Score</span>
+                    <span class="score-value" id="score">0</span>
+                </div>
+                <div class="score-item">
+                    <span class="score-label">Best</span>
+                    <span class="score-value" id="best">0</span>
+                </div>
+            </div>
+            <div class="ui-section next-section">
+                <div class="next-label">Next Piece</div>
+                <div id="nextPreview"></div>
+            </div>
+            <div class="ui-section help-section">
+                <div class="help-title">Controls</div>
+                <div class="help-text">
+                    <div><span class="key">←</span> <span class="key">→</span> Move</div>
+                    <div><span class="key">↓</span> Soft drop</div>
+                    <div><span class="key">Space</span> Hard drop</div>
+                    <div><span class="key">X</span> Rotate CW</div>
+                    <div><span class="key">Z</span> Rotate CCW</div>
+                    <div><span class="key">R</span> Restart</div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
-<div id="game"></div>
 
 <script>
 // ============================================================
@@ -477,11 +624,18 @@ class Gravity2048Scene extends Phaser.Scene {
     }
 
     create() {
-        // Calculate cell size based on canvas
-        this.cellSize = (this.cameras.main.width - 40) / BOARD_WIDTH;
+        // Calculate cell size to fit 20x10 board responsively
+        const maxWidth = Math.min(this.cameras.main.width - 40, 500);
+        const maxHeight = Math.min(this.cameras.main.height - 40, 740);
+        const cellSizeFromWidth = maxWidth / BOARD_WIDTH;
+        const cellSizeFromHeight = maxHeight / BOARD_HEIGHT;
+        this.cellSize = Math.floor(Math.min(cellSizeFromWidth, cellSizeFromHeight));
 
-        this.boardOffsetX = 20;
-        this.boardOffsetY = 20;
+        const boardWidth = this.cellSize * BOARD_WIDTH;
+        const boardHeight = this.cellSize * BOARD_HEIGHT;
+
+        this.boardOffsetX = (this.cameras.main.width - boardWidth) / 2;
+        this.boardOffsetY = (this.cameras.main.height - boardHeight) / 2;
 
         // Register game callbacks
         this.logic.on('render', () => this.render());
@@ -618,7 +772,56 @@ class Gravity2048Scene extends Phaser.Scene {
     }
 
     showNextPreview(type, value) {
-        // TODO: Show next piece preview
+        const preview = document.getElementById('nextPreview');
+        preview.innerHTML = '';
+
+        // Calculate cell size for preview (4x4 grid)
+        const previewSize = 4;
+        const availableSize = preview.offsetWidth;
+        const previewCellSize = Math.floor((availableSize - 20) / previewSize);
+
+        // Create SVG for preview
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('width', availableSize);
+        svg.setAttribute('height', preview.offsetHeight);
+        svg.setAttribute('viewBox', `0 0 ${availableSize} ${preview.offsetHeight}`);
+
+        // Get piece cells
+        const piece = this.logic.makePiece(type, value);
+        const cells = this.logic.cells(piece);
+
+        // Find bounds
+        const xs = cells.map(c => c[0]);
+        const ys = cells.map(c => c[1]);
+        const minX = Math.min(...xs);
+        const minY = Math.min(...ys);
+        const maxX = Math.max(...xs);
+        const maxY = Math.max(...ys);
+        const width = maxX - minX + 1;
+        const height = maxY - minY + 1;
+
+        // Center in preview
+        const offsetX = (availableSize - width * previewCellSize) / 2;
+        const offsetY = (preview.offsetHeight - height * previewCellSize) / 2;
+
+        const color = TILE_COLORS[value];
+        const colorHex = '#' + color.toString(16).padStart(6, '0');
+
+        for (const [x, y] of cells) {
+            const px = offsetX + (x - minX) * previewCellSize;
+            const py = offsetY + (y - minY) * previewCellSize;
+
+            const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            rect.setAttribute('x', px);
+            rect.setAttribute('y', py);
+            rect.setAttribute('width', previewCellSize - 2);
+            rect.setAttribute('height', previewCellSize - 2);
+            rect.setAttribute('fill', colorHex);
+            rect.setAttribute('rx', '4');
+            svg.appendChild(rect);
+        }
+
+        preview.appendChild(svg);
     }
 
     updateScoreUI(score) {
@@ -665,8 +868,8 @@ class Gravity2048Scene extends Phaser.Scene {
 const config = {
     type: Phaser.AUTO,
     parent: 'game',
-    width: 340,
-    height: 740,
+    width: window.innerWidth < 900 ? Math.min(window.innerWidth - 40, 500) : 500,
+    height: Math.min(window.innerHeight - 120, 740),
     scene: Gravity2048Scene,
     render: {
         pixelArt: true,
