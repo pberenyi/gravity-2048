@@ -782,17 +782,13 @@ class Gravity2048Scene extends Phaser.Scene {
     }
 
     create() {
-        // Get CSS custom property for cell size
-        const cellSizeStr = getComputedStyle(document.documentElement).getPropertyValue('--cell');
-        this.cellSize = parseInt(cellSizeStr);
-
-        const boardWidth = this.cellSize * BOARD_WIDTH;
-        const boardHeight = this.cellSize * BOARD_HEIGHT;
-        const gap = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gap'));
-
-        // Recalculate actual board size with gaps
-        const actualBoardWidth = boardWidth + (BOARD_WIDTH - 1) * gap;
-        const actualBoardHeight = boardHeight + (BOARD_HEIGHT - 1) * gap;
+        // Get CSS cell size (wait for it to be calculated)
+        const style = getComputedStyle(document.documentElement);
+        const cellSizeStr = style.getPropertyValue('--cell').trim();
+        const gapStr = style.getPropertyValue('--gap').trim();
+        
+        this.cellSize = parseInt(cellSizeStr) || 40; // fallback to 40px
+        const gap = parseInt(gapStr) || 4;
 
         this.boardOffsetX = 9;
         this.boardOffsetY = 9;
@@ -851,7 +847,7 @@ class Gravity2048Scene extends Phaser.Scene {
     }
 
     drawBackgroundGrid() {
-        const gap = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gap'));
+        const gap = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gap')) || 4;
         const boardWidth = this.cellSize * BOARD_WIDTH + (BOARD_WIDTH - 1) * gap;
         const boardHeight = this.cellSize * BOARD_HEIGHT + (BOARD_HEIGHT - 1) * gap;
 
@@ -872,7 +868,7 @@ class Gravity2048Scene extends Phaser.Scene {
     }
 
     drawTile(x, y, value, isFalling = false) {
-        const gap = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gap'));
+        const gap = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gap')) || 4;
         const posX = this.boardOffsetX + x * (this.cellSize + gap);
         const posY = this.boardOffsetY + y * (this.cellSize + gap);
 
@@ -970,26 +966,11 @@ class Gravity2048Scene extends Phaser.Scene {
 }
 
 // ========== Phaser Config ==========
-function getGameDimensions() {
-    const cellSizeStr = getComputedStyle(document.documentElement).getPropertyValue('--cell');
-    const cellSize = parseInt(cellSizeStr);
-    const gap = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gap'));
-
-    const boardWidth = cellSize * BOARD_WIDTH + (BOARD_WIDTH - 1) * gap + 18;
-    const boardHeight = cellSize * BOARD_HEIGHT + (BOARD_HEIGHT - 1) * gap + 18;
-
-    return {
-        width: Math.max(300, Math.min(window.innerWidth - 40, boardWidth)),
-        height: Math.max(400, Math.min(window.innerHeight - 120, boardHeight))
-    };
-}
-
-const dimensions = getGameDimensions();
 const config = {
     type: Phaser.AUTO,
     parent: 'game',
-    width: dimensions.width,
-    height: dimensions.height,
+    width: 340,
+    height: 740,
     scene: Gravity2048Scene,
     render: {
         pixelArt: true,
