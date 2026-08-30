@@ -706,6 +706,23 @@ class GameLogic {
                 this.emit('render');
                 await this.sleep(ANIMATION_TIMINGS.MERGE);
                 if (this.generation !== gen || !this.running) return false;
+
+                // Drop any remaining active cells in this column that are now floating
+                let remaining = [...activeCells].map(k => k.split(',').map(Number)).filter(([x]) => x === cx);
+                while (remaining.length > 0 && remaining.every(
+                    ([rcx, rcy]) => rcy + 1 < BOARD_HEIGHT && this.grid[rcy + 1][rcx] === null
+                )) {
+                    for (const [rcx, rcy] of remaining.sort((a, b) => b[1] - a[1])) {
+                        this.grid[rcy + 1][rcx] = this.grid[rcy][rcx];
+                        this.grid[rcy][rcx] = null;
+                        activeCells.delete(`${rcx},${rcy}`);
+                        activeCells.add(`${rcx},${rcy + 1}`);
+                    }
+                    remaining = [...activeCells].map(k => k.split(',').map(Number)).filter(([x]) => x === cx);
+                    this.emit('render');
+                    await this.sleep(ANIMATION_TIMINGS.MERGE);
+                    if (this.generation !== gen || !this.running) return false;
+                }
             }
         }
 
