@@ -852,8 +852,20 @@ class Gravity2048Scene extends Phaser.Scene {
 
         if (!this.textures.exists('gridBg')) {
             const graphics = this.make.graphics({ x: 0, y: 0, add: false });
+            // Board background
             graphics.fillStyle(0x0e1118, 1);
             graphics.fillRect(0, 0, boardWidth, boardHeight);
+            // Individual cell slots
+            for (let y = 0; y < BOARD_HEIGHT; y++) {
+                for (let x = 0; x < BOARD_WIDTH; x++) {
+                    const px = x * (this.cellSize + gap);
+                    const py = y * (this.cellSize + gap);
+                    graphics.fillStyle(0x171b24, 1);
+                    graphics.fillRoundedRect(px, py, this.cellSize, this.cellSize, 8);
+                    graphics.lineStyle(1, 0x242a37, 1);
+                    graphics.strokeRoundedRect(px, py, this.cellSize, this.cellSize, 8);
+                }
+            }
             graphics.generateTexture('gridBg', boardWidth, boardHeight);
             graphics.destroy();
         }
