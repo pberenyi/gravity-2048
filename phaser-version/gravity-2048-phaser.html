@@ -103,6 +103,8 @@
 
         #game {
             display: block;
+            width: 100%;
+            height: 100%;            
         }
 
         .side {
@@ -382,7 +384,8 @@ const ANIMATION_TIMINGS = {
     MERGE_PAUSE: 90,
     CLEAR: 170,
     CLEAR_PAUSE: 110,
-    SPAWN: 130
+    SPAWN: 130,
+    CASCADE_MESSAGE: 1000
 };
 
 const TILE_COLORS = {
@@ -425,6 +428,7 @@ class GameLogic {
         this.score = 0;
         this.best = Number(localStorage.getItem('gravity2048-best') || 0);
         this.running = false;
+        this.resolving = false;
         this.generation = 0;
         this.cascadeClearCount = 0;
         this.maxBoardValue = 2;
@@ -547,7 +551,7 @@ class GameLogic {
     }
 
     hardDrop() {
-        if (!this.running || !this.current) return;
+        if (!this.running || !this.current || this.resolving) return;
         let distance = 0;
         while (this.tryMove(0, 1)) distance++;
         this.score += distance * 2;
@@ -555,28 +559,33 @@ class GameLogic {
     }
 
     async lockCurrent() {
-        if (!this.running || !this.current) return;
-        const gen = this.generation;
-        const p = this.current;
-        this.current = null;
+        if (!this.running || !this.current || this.resolving) return;
+        this.resolving = true;
+        try{
+            const gen = this.generation;
+            const p = this.current;
+            this.current = null;
 
-        const newCells = new Set();
-        for (const [x, y] of this.cells(p)) {
-            if (y < 0 || y >= BOARD_HEIGHT || x < 0 || x >= BOARD_WIDTH) {
-                this.endGame();
-                return;
+            const newCells = new Set();
+            for (const [x, y] of this.cells(p)) {
+                if (y < 0 || y >= BOARD_HEIGHT || x < 0 || x >= BOARD_WIDTH) {
+                    this.endGame();
+                    return;
+                }
+                this.grid[y][x] = p.value;
+                newCells.add(`${x},${y}`);
             }
-            this.grid[y][x] = p.value;
-            newCells.add(`${x},${y}`);
+
+            this.emit('render');
+            await this.resolveBoard(newCells, gen, true);
+            if (!this.running || this.generation !== gen) return;
+
+            this.spawn();
+            this.emit('render');
+            this.scheduleFall();
+        } finally {
+            this.resolving = false; 
         }
-
-        this.emit('render');
-        await this.resolveBoard(newCells, gen, true);
-        if (!this.running || this.generation !== gen) return;
-
-        this.spawn();
-        this.emit('render');
-        this.scheduleFall();
     }
 
     scheduleFall() {
@@ -929,7 +938,7 @@ class Gravity2048Scene extends Phaser.Scene {
             this.tweens.add({
                 targets: this.sprites[key],
                 scale: 1.1,
-                duration: 100,
+                duration: ANIMATION_TIMINGS.MERGE,
                 yoyo: true
             });
         }
@@ -993,7 +1002,7 @@ class Gravity2048Scene extends Phaser.Scene {
         messageEl.textContent = `Cascade ×${count}!`;
         setTimeout(() => {
             if (messageEl.textContent.startsWith('Cascade')) messageEl.textContent = '';
-        }, 1000);
+        }, ANIMATION_TIMINGS.CASCADE_MESSAGE);
     }
 }
 
@@ -1040,6 +1049,64 @@ function restartGame() {
 
 document.getElementById('restart').addEventListener('click', restartGame);
 document.getElementById('restartOverlay').addEventListener('click', restartGame);
+
+// ========== Responsive Resize Handling ==========
+let resizeTimer = null;
+
+function measureCellAndGap() {
+    const probe = document.createElement('div');
+    probe.style.cssText =
+        'position:absolute;visibility:hidden;width:var(--cell);height:var(--cell);';
+    document.body.appendChild(probe);
+    const cell = probe.offsetWidth || 40;
+    const gap = parseInt(
+        getComputedStyle(document.documentElement).getPropertyValue('--gap'), 10
+    ) || 4;
+    document.body.removeChild(probe);
+    return { cell, gap };
+}
+
+function handleResize() {
+    const { cell, gap } = measureCellAndGap();
+
+    const newBoardW = cell * BOARD_WIDTH  + (BOARD_WIDTH  - 1) * gap;
+    const newBoardH = cell * BOARD_HEIGHT + (BOARD_HEIGHT - 1) * gap;
+
+    // Bail out if nothing actually changed
+    const scene = game.scene.scenes[0];
+    if (!scene) return;
+    if (cell === scene.cellSize && gap === scene.gap) return;
+
+    // Update static + instance properties
+    Gravity2048Scene.cellSize   = cell;
+    Gravity2048Scene.gap        = gap;
+    Gravity2048Scene.boardWidth  = newBoardW;
+    Gravity2048Scene.boardHeight = newBoardH;
+    scene.cellSize = cell;
+    scene.gap      = gap;
+
+    // Resize the Phaser canvas
+    game.scale.resize(newBoardW, newBoardH);
+
+    // Invalidate the cached grid background so it regenerates at the new size
+    if (scene.textures.exists('gridBg')) {
+        scene.textures.remove('gridBg');
+    }
+
+    // Full re-render (repositions every tile at the new cell size)
+    scene.render();
+}
+
+window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(handleResize, 150);   // debounce
+});
+
+const ro = new ResizeObserver(() => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(handleResize, 150);
+});
+ro.observe(document.body);
 </script>
 </body>
 </html>
