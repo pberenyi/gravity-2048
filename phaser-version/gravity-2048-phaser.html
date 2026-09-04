@@ -801,7 +801,9 @@ class Gravity2048Scene extends Phaser.Scene {
     constructor() {
         super({ key: 'Gravity2048' });
         this.logic = new GameLogic();
-        this.sprites = {};
+        this.sprites = {};       // keyed by "x,y" (board) or "fx,y" (falling)
+        this.prevGrid = null;    // deep copy of grid after last render
+        this.prevFalling = [];   // falling piece cells from last render
         this.cellSize = 0;
         this.boardOffsetX = 0;
         this.boardOffsetY = 0;
@@ -810,9 +812,10 @@ class Gravity2048Scene extends Phaser.Scene {
     create() {
         this.cellSize = Gravity2048Scene.cellSize;
         this.gap = Gravity2048Scene.gap;
-
         this.boardOffsetX = 0;
         this.boardOffsetY = 0;
+
+        this.createBackgroundGrid();
 
         // Register callbacks
         this.logic.on('render', () => this.render());
@@ -846,60 +849,75 @@ class Gravity2048Scene extends Phaser.Scene {
         } else if (key === 'r') this.logic.newGame();
     }
 
-    render() {
-        Object.values(this.sprites).forEach(sprite => {
-            this.tweens.killTweensOf(sprite);
-            sprite.setVisible(false);
-            sprite.destroy();
-        });
-        this.sprites = {};
+    // Called once (and on resize). Draws the static background texture.
+    createBackgroundGrid() {
+        const gap = this.gap;
+        const boardWidth  = this.cellSize * BOARD_WIDTH  + (BOARD_WIDTH  - 1) * gap;
+        const boardHeight = this.cellSize * BOARD_HEIGHT + (BOARD_HEIGHT - 1) * gap;
 
-        this.drawBackgroundGrid();
-
+        if (this.textures.exists('gridBg')) this.textures.remove('gridBg');
+        const graphics = this.make.graphics({ x: 0, y: 0, add: false });
+        graphics.fillStyle(0x0e1118, 1);
+        graphics.fillRect(0, 0, boardWidth, boardHeight);
         for (let y = 0; y < BOARD_HEIGHT; y++) {
             for (let x = 0; x < BOARD_WIDTH; x++) {
-                if (this.logic.grid[y][x] !== null) {
-                    this.drawTile(x, y, this.logic.grid[y][x]);
-                }
+                const px = x * (this.cellSize + gap);
+                const py = y * (this.cellSize + gap);
+                graphics.fillStyle(0x171b24, 1);
+                graphics.fillRoundedRect(px, py, this.cellSize, this.cellSize, 8);
+                graphics.lineStyle(1, 0x242a37, 1);
+                graphics.strokeRoundedRect(px, py, this.cellSize, this.cellSize, 8);
             }
         }
+        graphics.generateTexture('gridBg', boardWidth, boardHeight);
+        graphics.destroy();
 
-        if (this.logic.current) {
-            for (const [x, y] of this.logic.cells(this.logic.current)) {
-                this.drawTile(x, y, this.logic.current.value, true, 'f');
-            }
+        if (this.bgImage) this.bgImage.destroy();
+        this.bgImage = this.add.image(0, 0, 'gridBg').setOrigin(0, 0).setDepth(-1);
+    }
+
+    // Destroy and remove a single sprite pair by key.
+    _destroySprite(key) {
+        for (const k of [key, `${key}-text`]) {
+            const s = this.sprites[k];
+            if (!s) continue;
+            this.tweens.killTweensOf(s);
+            s.setVisible(false);
+            s.destroy();
+            delete this.sprites[k];
         }
     }
 
-    drawBackgroundGrid() {
-        const gap = this.gap;
-        const boardWidth = this.cellSize * BOARD_WIDTH + (BOARD_WIDTH - 1) * gap;
-        const boardHeight = this.cellSize * BOARD_HEIGHT + (BOARD_HEIGHT - 1) * gap;
+    render() {
+        const curGrid    = this.logic.grid;
+        const prevGrid   = this.prevGrid;
+        const curFalling = this.logic.current
+            ? this.logic.cells(this.logic.current).map(([x, y]) => `${x},${y}`)
+            : [];
 
-        if (!this.textures.exists('gridBg')) {
-            const graphics = this.make.graphics({ x: 0, y: 0, add: false });
-            // Board background
-            graphics.fillStyle(0x0e1118, 1);
-            graphics.fillRect(0, 0, boardWidth, boardHeight);
-            // Individual cell slots
-            for (let y = 0; y < BOARD_HEIGHT; y++) {
-                for (let x = 0; x < BOARD_WIDTH; x++) {
-                    const px = x * (this.cellSize + gap);
-                    const py = y * (this.cellSize + gap);
-                    graphics.fillStyle(0x171b24, 1);
-                    graphics.fillRoundedRect(px, py, this.cellSize, this.cellSize, 8);
-                    graphics.lineStyle(1, 0x242a37, 1);
-                    graphics.strokeRoundedRect(px, py, this.cellSize, this.cellSize, 8);
-                }
+        // --- Board cells: only update what changed ---
+        for (let y = 0; y < BOARD_HEIGHT; y++) {
+            for (let x = 0; x < BOARD_WIDTH; x++) {
+                const cur  = curGrid[y][x];
+                const prev = prevGrid ? prevGrid[y][x] : undefined;
+                if (cur === prev) continue;
+                const key = `${x},${y}`;
+                this._destroySprite(key);
+                if (cur !== null) this.drawTile(x, y, cur);
             }
-            graphics.generateTexture('gridBg', boardWidth, boardHeight);
-            graphics.destroy();
         }
 
-        const bg = this.add.image(this.boardOffsetX, this.boardOffsetY, 'gridBg');
-        bg.setOrigin(0, 0);
-        bg.setDepth(-1);
-        this.sprites['__bg'] = bg;
+        // --- Falling piece: clear old positions, draw new ones ---
+        for (const key of this.prevFalling) {
+            this._destroySprite(`f${key}`);
+        }
+        for (const key of curFalling) {
+            this.drawTile(...key.split(',').map(Number), this.logic.current.value, true, 'f');
+        }
+
+        // Snapshot grid for next diff (shallow row copy is enough — values are primitives)
+        this.prevGrid   = curGrid.map(row => row.slice());
+        this.prevFalling = curFalling;
     }
 
     drawTile(x, y, value, isFalling = false, keyPrefix = '') {
@@ -1043,8 +1061,9 @@ function restartGame() {
     scene.tweens.killAll();
     Object.values(scene.sprites).forEach(s => { s.setVisible(false); s.destroy(); });
     scene.sprites = {};
+    scene.prevGrid = null;
+    scene.prevFalling = [];
     scene.logic.newGame();
-    scene.render();
 }
 
 document.getElementById('restart').addEventListener('click', restartGame);
@@ -1089,9 +1108,14 @@ function handleResize() {
     game.scale.resize(newBoardW, newBoardH);
 
     // Invalidate the cached grid background so it regenerates at the new size
-    if (scene.textures.exists('gridBg')) {
-        scene.textures.remove('gridBg');
-    }
+    scene.createBackgroundGrid();
+
+    // Reset diff state so next render redraws everything
+    scene.tweens.killAll();
+    Object.values(scene.sprites).forEach(s => { s.setVisible(false); s.destroy(); });
+    scene.sprites = {};
+    scene.prevGrid = null;
+    scene.prevFalling = [];
 
     // Full re-render (repositions every tile at the new cell size)
     scene.render();
