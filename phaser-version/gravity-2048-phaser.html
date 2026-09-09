@@ -102,9 +102,7 @@
         }
 
         #game {
-            display: block;
-            width: 100%;
-            height: 100%;            
+            display: block;   
         }
 
         .side {
@@ -122,8 +120,11 @@
 
         .next {
             height: 100px;
-            display: grid;
-            place-items: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
             margin-bottom: 15px;
             background: #11151e;
             border-radius: 10px;
@@ -131,14 +132,10 @@
         }
 
         .next-block {
-            width: 80px;
-            height: 80px;
             display: grid;
             grid-template-columns: repeat(4, 18px);
-            grid-template-rows: repeat(4, 18px);
+            grid-template-rows: repeat(2, 18px);
             gap: 2px;
-            align-content: center;
-            justify-content: center;
         }
 
         .preview-cell {
@@ -150,12 +147,9 @@
         }
 
         .preview-value {
-            grid-column: 1 / -1;
-            text-align: center;
-            font-size: 13px;
+            font-size: 16px;
             font-weight: 800;
             color: var(--accent);
-            margin-top: 4px;
         }
 
         button {
@@ -243,13 +237,12 @@
 
             .next {
                 height: 80px;
+                gap: 4px;
             }
 
             .next-block {
-                width: 60px;
-                height: 60px;
                 grid-template-columns: repeat(4, 14px);
-                grid-template-rows: repeat(4, 14px);
+                grid-template-rows: repeat(2, 14px);
             }
 
             .preview-cell {
@@ -258,7 +251,7 @@
             }
 
             .preview-value {
-                font-size: 11px;
+                font-size: 13px;
             }
         }
 
@@ -363,10 +356,19 @@
                 <kbd>↑</kbd> / <kbd>X</kbd> rotate clockwise<br>
                 <kbd>Z</kbd> rotate counter-clockwise<br>
                 <kbd>Space</kbd> hard drop<br><br>
+                <kbd>R</kbd> restart<br>
+                <kbd>P</kbd> pause<br>
                 Blocks merge only when the falling block lands on an identical value.
                 A full row clears. Clearing a row triggers gravity, which can cause further merges and clears.
             </div>
         </aside>
+    </div>
+</div>
+<div class="overlay" id="paused">
+    <div>
+        <h2>Paused</h2>
+        <p>Press <kbd>P</kbd> to resume</p>
+        <button id="resumeBtn">Resume</button>
     </div>
 </div>
 
@@ -409,7 +411,7 @@ const TEXT_COLORS = {
 };
 
 const SHAPES = {
-    I: [[0, 1], [1, 1], [2, 1], [3, 1]],
+    I: [[0, 0], [1, 0], [2, 0], [3, 0]],
     O: [[1, 0], [2, 0], [1, 1], [2, 1]],
     T: [[1, 0], [0, 1], [1, 1], [2, 1]],
     S: [[1, 0], [2, 0], [0, 1], [1, 1]],
@@ -417,6 +419,24 @@ const SHAPES = {
     J: [[0, 0], [0, 1], [1, 1], [2, 1]],
     L: [[2, 0], [0, 1], [1, 1], [2, 1]]
 };
+
+// Precompute all rotations for each shape, normalised to the top-left of the bounding box
+const PRECOMPUTED_SHAPES = {};
+for (const [type, baseCells] of Object.entries(SHAPES)) {
+    PRECOMPUTED_SHAPES[type] = [];
+    let cells = baseCells;
+    for (let r = 0; r < 4; r++) {
+        // Normalise so the top-left of the bounding box is (0,0)
+        const minX = Math.min(...cells.map(c => c[0]));
+        const minY = Math.min(...cells.map(c => c[1]));
+        PRECOMPUTED_SHAPES[type][r] =
+            cells.map(([x, y]) => [x - minX, y - minY]);
+        // Rotate 90° clockwise for the next state: (x,y) → (3−y, x)
+        if (type !== 'O') {
+            cells = cells.map(([x, y]) => [3 - y, x]);
+        }
+    }
+}
 
 // ========== Game Logic ==========
 class GameLogic {
@@ -426,14 +446,18 @@ class GameLogic {
         this.nextType = null;
         this.nextValue = null;
         this.score = 0;
-        this.best = Number(localStorage.getItem('gravity2048-best') || 0);
+        try {
+            this.best = Number(localStorage.getItem('gravity2048-best')) || 0;
+        } catch {
+            this.best = 0;
+        }
         this.running = false;
         this.resolving = false;
         this.generation = 0;
         this.cascadeClearCount = 0;
         this.maxBoardValue = 2;
-        this.fallTimer = null;
         this.callbacks = {};
+        this._sleep = null;
     }
 
     on(event, callback) {
@@ -447,6 +471,9 @@ class GameLogic {
         }
     }
 
+    setSleep(fn) { this._sleep = fn ?? ((ms) => new Promise(r => setTimeout(r, ms))); }
+    sleep(ms)    { return this._sleep(ms); }
+
     static randomType() {
         const types = Object.keys(SHAPES);
         return types[Math.floor(Math.random() * types.length)];
@@ -455,7 +482,11 @@ class GameLogic {
     randomValue() {
         const levels = [];
         for (let v = 2; v <= this.maxBoardValue; v *= 2) levels.push(v);
-        const weights = levels.map((_, i) => Math.pow(0.5, i));
+        // As maxBoardValue grows, the decay base increases toward 0.92,
+        // flattening the distribution and favouring higher values.
+        const shift = 1 + 0.05 * Math.log2(this.maxBoardValue / 2);
+        const decay = Math.min(0.92, 0.75 * shift);
+        const weights = levels.map((_, i) => Math.pow(decay, i));
         const total = weights.reduce((a, b) => a + b, 0);
         let r = Math.random() * total;
         for (let i = 0; i < levels.length; i++) {
@@ -465,20 +496,24 @@ class GameLogic {
         return levels[levels.length - 1];
     }
 
+     getFallInterval() {
+        if (!this.current) return FALL_INTERVAL;
+        // steps: 0 for value 2, 1 for 4, 2 for 8, …
+        const steps = Math.log2(this.current.value / 2);
+        const factor = Math.pow(0.85, steps);
+        return Math.max(150, Math.round(FALL_INTERVAL * factor));
+    }
+
     makePiece(type, value) {
-        return { type, value, rotation: 0, x: 3, y: 0 };
+        const widths = { I: 4, O: 2, T: 3, S: 3, Z: 3, J: 3, L: 3 };
+        const x = Math.floor((BOARD_WIDTH - widths[type]) / 2);
+
+        return { type, value, rotation: 0, x: x, y: 0 };
     }
 
     cells(piece, rotation = piece.rotation, px = piece.x, py = piece.y) {
-        let out = SHAPES[piece.type].map(([x, y]) => [x, y]);
-        if (piece.type !== 'O') {
-            for (let r = 0; r < rotation % 4; r++) {
-                out = out.map(([x, y]) => [3 - y, x]);
-            }
-        }
-        const minX = Math.min(...out.map(c => c[0]));
-        const minY = Math.min(...out.map(c => c[1]));
-        return out.map(([x, y]) => [x - minX + px, y - minY + py]);
+        const norm = PRECOMPUTED_SHAPES[piece.type][((rotation % 4) + 4) % 4];
+        return norm.map(([x, y]) => [x + px, y + py]);
     }
 
     collides(piece, dx = 0, dy = 0, rotation = piece.rotation) {
@@ -491,6 +526,7 @@ class GameLogic {
 
     newGame() {
         this.generation++;
+        this.emit('stopFall');
         this.grid = Array.from({ length: BOARD_HEIGHT }, () => Array(BOARD_WIDTH).fill(null));
         this.score = 0;
         this.cascadeClearCount = 0;
@@ -500,7 +536,7 @@ class GameLogic {
         this.nextValue = this.randomValue();
         this.spawn();
         this.emit('render');
-        this.scheduleFall();
+        this.emit('startFall');
     }
 
     spawn() {
@@ -522,7 +558,7 @@ class GameLogic {
     }
 
     move(dx, dy) {
-        if (!this.running || !this.current) return false;
+        if (!this.running || this.resolving || !this.current) return false;
         if (this.tryMove(dx, dy)) {
             this.emit('render');
             return true;
@@ -532,7 +568,7 @@ class GameLogic {
     }
 
     rotate(dir = 1) {
-        if (!this.running || !this.current || this.current.type === 'O') return;
+        if (!this.running || !this.current || this.resolving || this.current.type === 'O') return;
         const target = (this.current.rotation + dir + 4) % 4;
         const kicks = [
             [0, 0], [-1, 0], [1, 0], [-2, 0], [2, 0],
@@ -555,13 +591,15 @@ class GameLogic {
         let distance = 0;
         while (this.tryMove(0, 1)) distance++;
         this.score += distance * 2;
+        this.emit('scoreUpdated', this.score);
         this.lockCurrent();
     }
 
     async lockCurrent() {
         if (!this.running || !this.current || this.resolving) return;
         this.resolving = true;
-        try{
+        this.emit('stopFall');             // kill the repeating tick immediately
+        try {
             const gen = this.generation;
             const p = this.current;
             this.current = null;
@@ -582,25 +620,18 @@ class GameLogic {
 
             this.spawn();
             this.emit('render');
-            this.scheduleFall();
+            this.emit('startFall');
         } finally {
-            this.resolving = false; 
+            this.resolving = false;
         }
-    }
-
-    scheduleFall() {
-        clearInterval(this.fallTimer);
-        this.fallTimer = setInterval(() => {
-            if (!this.running || !this.current) return;
-            if (!this.tryMove(0, 1)) this.lockCurrent();
-            else this.emit('render');
-        }, FALL_INTERVAL);
     }
 
     async resolveBoard(activeCells, gen, allowGroupDrop = true) {
         this.cascadeClearCount = 0;
+        let totalRowsCleared = 0;
+        let safety = BOARD_HEIGHT * BOARD_WIDTH;
 
-        while (true) {
+        while (safety-- > 0) {
             const hadMerges = await this.resolveVerticalMerges(activeCells, gen, allowGroupDrop);
             allowGroupDrop = false;
             if (this.generation !== gen || !this.running) return;
@@ -615,6 +646,7 @@ class GameLogic {
 
             if (rows.length) {
                 this.cascadeClearCount++;
+                totalRowsCleared += rows.length;
                 const raw = rows.reduce((sum, r) => sum + this.grid[r].reduce((a, v) => a + (v || 0), 0), 0);
                 const multiplier = Math.max(1, this.cascadeClearCount);
                 this.score += raw * multiplier;
@@ -625,14 +657,19 @@ class GameLogic {
 
                 activeCells = this.computeFallenCellsFromGrid(rows);
                 this.removeRowsWithCollapse(rows);
+                //the grid reference changed; scene must drop its diff cache
+                this.emit('gridReplaced');
                 this.emit('render');
                 await this.sleep(ANIMATION_TIMINGS.CLEAR_PAUSE);
                 if (this.generation !== gen || !this.running) return;
             }
         }
 
-        if (this.cascadeClearCount > 1) {
-            this.emit('cascade', this.cascadeClearCount);
+        if (totalRowsCleared >= 2) {
+            const label = this.cascadeClearCount > 1 
+                ? `Cascade ×${totalRowsCleared}!`
+                : `Multi-clear ×${totalRowsCleared}!`;
+            this.emit('cascade', label);
         }
         this.updateScore();
     }
@@ -669,11 +706,13 @@ class GameLogic {
             activeCells.delete(keyBelow);
             this.score += this.grid[y + 1][x];
             if (this.grid[y + 1][x] > this.maxBoardValue) this.maxBoardValue = this.grid[y + 1][x];
-
-            this.emit('merge', x, y + 1, this.grid[y + 1][x]);
         }
 
         this.emit('render');
+        for (const [x, y] of toMerge) {
+            this.emit('merge', x, y + 1, this.grid[y + 1][x]);
+        }
+
         await this.sleep(ANIMATION_TIMINGS.MERGE);
         if (this.generation !== gen || !this.running) return false;
 
@@ -711,8 +750,8 @@ class GameLogic {
                     this.grid[mergeY][cx] = null;
                     mergeY++;
                 }
-                this.emit('merge', cx, mergeY, this.grid[mergeY][cx]);
                 this.emit('render');
+                this.emit('merge', cx, mergeY, this.grid[mergeY][cx]);
                 await this.sleep(ANIMATION_TIMINGS.MERGE);
                 if (this.generation !== gen || !this.running) return false;
 
@@ -779,7 +818,11 @@ class GameLogic {
     updateScore() {
         if (this.score > this.best) {
             this.best = this.score;
-            localStorage.setItem('gravity2048-best', this.best);
+            try {
+                localStorage.setItem('gravity2048-best', this.best);
+            } catch {
+                // Ignore localStorage errors
+            }
             this.emit('bestUpdated', this.best);
         }
         this.emit('scoreUpdated', this.score);
@@ -787,12 +830,7 @@ class GameLogic {
 
     endGame() {
         this.running = false;
-        clearInterval(this.fallTimer);
         this.emit('gameOver', this.score, this.best);
-    }
-
-    sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
     }
 }
 
@@ -805,8 +843,10 @@ class Gravity2048Scene extends Phaser.Scene {
         this.prevGrid = null;    // deep copy of grid after last render
         this.prevFalling = [];   // falling piece cells from last render
         this.cellSize = 0;
+        this.gap = 0;
         this.boardOffsetX = 0;
         this.boardOffsetY = 0;
+        this.fallEvent = null;     
     }
 
     create() {
@@ -816,6 +856,12 @@ class Gravity2048Scene extends Phaser.Scene {
         this.boardOffsetY = 0;
 
         this.createBackgroundGrid();
+        this.buildTileTextures();
+        
+        // ── Inject Phaser-backed sleep into the logic ──
+        this.logic.setSleep((ms) =>
+            new Promise(resolve => this.time.delayedCall(ms, resolve))
+        );
 
         // Register callbacks
         this.logic.on('render', () => this.render());
@@ -826,6 +872,9 @@ class Gravity2048Scene extends Phaser.Scene {
         this.logic.on('bestUpdated', (best) => this.updateBestUI(best));
         this.logic.on('gameOver', (score, best) => this.showGameOver(score, best));
         this.logic.on('cascade', (count) => this.showCascadeMessage(count));
+        this.logic.on('startFall', () => this.startFallTimer());
+        this.logic.on('stopFall', () => this.stopFallTimer());
+        this.logic.on('gridReplaced', () => this.handleGridReplaced());
 
         // Input
         this.input.keyboard.on('keydown', (e) => this.handleKeyPress(e));
@@ -836,17 +885,154 @@ class Gravity2048Scene extends Phaser.Scene {
         this.updateBestUI(this.logic.best);
     }
 
+    // ──────────────────────────────────────────────
+    // Phaser-driven fall timer
+    // ──────────────────────────────────────────────
+    startFallTimer() {
+        this.stopFallTimer();
+        const interval = this.logic.getFallInterval();
+        this.fallEvent = this.time.addEvent({
+            delay: interval,
+            callback: this.fallTick,
+            callbackScope: this,
+            repeat: -1
+        });
+    }
+
+    stopFallTimer() {
+        if (this.fallEvent) {
+            this.fallEvent.remove();
+            this.fallEvent = null;
+        }
+    }
+
+    fallTick() {
+        if (this.paused) return;
+        if (!this.logic.running || !this.logic.current) {
+            this.stopFallTimer();
+            return;
+        }
+        if (!this.logic.tryMove(0, 1)) {
+            this.logic.lockCurrent();       // lockCurrent will stop/restart the timer
+        } else {
+            this.logic.emit('render');
+        }
+    }
+
+    buildTileTextures() {
+        const pad    = 2;
+        const size   = this.cellSize;
+        const inner  = size - pad * 2;
+        const radius = 4;
+
+        const values = Object.keys(TILE_COLORS).map(Number);
+
+        for (const val of values) {
+            const color     = TILE_COLORS[val];
+            const textColor = val >= 64 ? '#ffffff' : '#111111';
+            const str       = String(val);
+
+            // Font sizing — match original: clamp(12, cell * 0.45, 22)
+            const fontPx = Math.min(22, Math.max(12, Math.round(this.cellSize * 0.45)));
+
+            const rt = this.make.renderTexture({
+                width: this.cellSize, height: this.cellSize, add: false
+            });
+
+            // ── Background ──
+            const gfx = this.make.graphics({ x: 0, y: 0, add: false });
+            gfx.fillStyle(color, 1);
+            gfx.fillRoundedRect(pad, pad, inner, inner, radius);
+            const outlineColor = val >= 64 ? 0xffffff : 0xffff26;
+            gfx.lineStyle(3, outlineColor, 1);
+            gfx.strokeRoundedRect(pad, pad, inner, inner, radius);
+            rt.draw(gfx, 0, 0);
+            gfx.destroy();
+
+            // ── Number ──
+            const textStyle = {
+                fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+                fontSize:   `${fontPx}px`,
+                fontStyle:  'bold',
+                color:      textColor,
+                align:      'center',
+            };
+
+            const txt = this.make.text({ x: 0, y: 0, text: str, style: textStyle });
+            txt.setOrigin(0.5, 0.5);
+            txt.setPosition(this.cellSize / 2, this.cellSize / 2);
+            rt.draw(txt);
+            txt.destroy();
+
+            // ── Save & clean up ──
+            rt.saveTexture(`tile-${val}`);
+            rt.destroy();
+        }
+    }
+
     handleKeyPress(event) {
         const key = event.key.toLowerCase();
-        if (key === 'arrowleft') this.logic.move(-1, 0);
-        else if (key === 'arrowright') this.logic.move(1, 0);
-        else if (key === 'arrowdown') this.logic.move(0, 1);
-        else if (key === 'arrowup' || key === 'x') this.logic.rotate(1);
-        else if (key === 'z') this.logic.rotate(-1);
-        else if (key === ' ') {
+        if (key === 'p') {
+            this.togglePause();
+            return;
+        }
+        if (this.paused) return;
+        // Prevent the browser from scrolling / triggering defaults
+        const gameKeys = ['arrowleft','arrowright','arrowdown','arrowup',' ', 'x', 'z', 'r'];
+        const arrowKeys = ['arrowleft','arrowright','arrowdown'];
+        if (gameKeys.includes(key)) {
             event.preventDefault();
-            this.logic.hardDrop();
-        } else if (key === 'r') this.logic.newGame();
+        }
+
+        // Ignore OS key-repeat (holding a key fires keydown repeatedly)
+        if (!arrowKeys.includes(key) && event.repeat) return;
+
+        if (key === 'arrowleft')       this.logic.move(-1, 0);
+        else if (key === 'arrowright') this.logic.move(1, 0);
+        else if (key === 'arrowdown')  this.logic.move(0, 1);
+        else if (key === 'arrowup' || key === 'x') this.logic.rotate(1);
+        else if (key === 'z')          this.logic.rotate(-1);
+        else if (key === ' ')         this.logic.hardDrop();
+        else if (key === 'r') {
+            document.getElementById('gameover').classList.remove('show');
+            document.getElementById('message').textContent = '';
+            this.handleGridReplaced();
+            this.logic.newGame();
+        }
+    }
+
+    togglePause() {
+        if (!this.logic.running) return;
+        if (this.paused) {
+            this.paused = false;
+            this.logic.emit('startFall');
+            document.getElementById('paused').classList.remove('show');
+        } 
+        else {
+            this.paused = true;
+            this.logic.emit('stopFall');
+            document.getElementById('paused').classList.add('show');
+        }
+    }        
+
+    handleGridReplaced() {
+        // Kill any in-flight tweens (clear-shrink, merge-pulse) so we don't
+        // leave orphaned targets.
+        for (const s of Object.values(this.sprites))
+            if (s && !s.destroyed) this.tweens.killTweensOf(s);
+
+        // Destroy every tracked sprite (board + falling).
+        for (const key of Object.keys(this.sprites)) {
+            const s = this.sprites[key];
+            if (s && !s.destroyed) {
+                s.destroy();
+            }
+            delete this.sprites[key];
+        }
+
+        // Invalidate the diff cache → next render() redraws the entire board.
+        this.prevGrid = null;
+        this.prevFalling = [];
     }
 
     // Called once (and on resize). Draws the static background texture.
@@ -878,14 +1064,12 @@ class Gravity2048Scene extends Phaser.Scene {
 
     // Destroy and remove a single sprite pair by key.
     _destroySprite(key) {
-        for (const k of [key, `${key}-text`]) {
-            const s = this.sprites[k];
-            if (!s) continue;
-            this.tweens.killTweensOf(s);
-            s.setVisible(false);
-            s.destroy();
-            delete this.sprites[k];
-        }
+       const s = this.sprites[key];
+       if (!s) return;
+       this.tweens.killTweensOf(s);
+       s.setVisible(false);
+       s.destroy();
+       delete this.sprites[key];
     }
 
     render() {
@@ -915,85 +1099,91 @@ class Gravity2048Scene extends Phaser.Scene {
             this.drawTile(...key.split(',').map(Number), this.logic.current.value, true, 'f');
         }
 
+        // Safety: make sure every non-null cell has a sprite.
+        // Catches any edge case where a sprite was removed externally
+        // (e.g., by an animation) but the diff didn't notice.
+        for (let y = 0; y < BOARD_HEIGHT; y++) {
+            for (let x = 0; x < BOARD_WIDTH; x++) {
+                const key = `${x},${y}`;
+                if (curGrid[y][x] !== null && !this.sprites[key]) {
+                    this.drawTile(x, y, curGrid[y][x]);
+                }
+            }
+        }
+
         // Snapshot grid for next diff (shallow row copy is enough — values are primitives)
         this.prevGrid   = curGrid.map(row => row.slice());
         this.prevFalling = curFalling;
     }
 
     drawTile(x, y, value, isFalling = false, keyPrefix = '') {
-        const gap = this.gap;
-        const posX = this.boardOffsetX + x * (this.cellSize + gap);
-        const posY = this.boardOffsetY + y * (this.cellSize + gap);
+        const posX = this.boardOffsetX + x * (this.cellSize + this.gap);
+        const posY = this.boardOffsetY + y * (this.cellSize + this.gap);
 
-        const color = TILE_COLORS[value] || TILE_COLORS[4096];
-        const textColor = value >= 64 ? TEXT_COLORS.dark : TEXT_COLORS.light;
+        const texName = `tile-${TILE_COLORS[value] ? value : 4096}`;  // fallback for values beyond 4096
 
-        const tile = this.add.rectangle(posX + this.cellSize / 2, posY + this.cellSize / 2, this.cellSize - 4, this.cellSize - 4, color, 1);
-        tile.setStrokeStyle(2, 0xffffff28);
-        tile.setDepth(isFalling ? 2 : 1);
+        const img = this.add.image(
+            posX + this.cellSize / 2,
+            posY + this.cellSize / 2,
+            texName
+        );
+        img.setDepth(isFalling ? 2 : 1);
+        if (isFalling) img.setAlpha(0.8);
 
-        const text = this.add.text(posX + this.cellSize / 2, posY + this.cellSize / 2, value.toString(), {
-            fontSize: `${Math.max(12, this.cellSize * 0.45)}px`,
-            fontStyle: 'bold',
-            color: `#${textColor.toString(16).padStart(6, '0')}`
-        });
-        text.setOrigin(0.5, 0.5);
-        text.setDepth(isFalling ? 2 : 1);
-
-        if (isFalling) {
-            tile.setAlpha(0.8);
-            text.setAlpha(0.8);
-        }
-
-        const key = `${keyPrefix}${x},${y}`;
-        this.sprites[key] = tile;
-        this.sprites[`${key}-text`] = text;
+        this.sprites[`${keyPrefix}${x},${y}`] = img;
     }
 
     animateMerge(x, y, value) {
-        const key = `${x},${y}`;
-        if (this.sprites[key]) {
-            this.tweens.add({
-                targets: this.sprites[key],
-                scale: 1.1,
-                duration: ANIMATION_TIMINGS.MERGE,
-                yoyo: true
-            });
-        }
+        const key    = `${x},${y}`;
+       const img = this.sprites[key];
+       if (!img) return;
+       this.tweens.add({
+           targets: img,
+           scale: 1.15,
+           duration: ANIMATION_TIMINGS.MERGE,
+           yoyo: true
+       });
     }
 
     animateClearRows(rows) {
-        const gen = this.logic.generation;
         rows.forEach(y => {
             for (let x = 0; x < BOARD_WIDTH; x++) {
-                const key = `${x},${y}`;
-                const tile = this.sprites[key];
-                const text = this.sprites[`${key}-text`];
-                delete this.sprites[key];
-                delete this.sprites[`${key}-text`];
-                if (tile) {
-                    this.tweens.add({
-                        targets: [tile, text],
-                        scale: 0.2,
-                        alpha: 0,
-                        duration: ANIMATION_TIMINGS.CLEAR,
-                        ease: 'Quad.easeIn',
-                        onComplete: () => { tile.destroy(); text?.destroy(); }
-                    });
-                }
+                const key  = `${x},${y}`;
+                const img  = this.sprites[key];
+                if (!img) continue;
+
+                // Do NOT delete from this.sprites here.
+                // The entry stays until the object is actually destroyed.
+                this.tweens.add({
+                    targets: img,
+                    scale: 0.2,
+                    alpha: 0,
+                    duration: ANIMATION_TIMINGS.CLEAR,
+                    ease: 'Quad.easeIn',
+                    onComplete: () => {
+                        if (!img.destroyed) img.destroy();
+                        // Now that the object is gone, drop the bookkeeping entry.
+                        delete this.sprites[key];
+                    }
+                });
             }
         });
     }
 
+
     updateNextPreview(type, value) {
-        const nextEl = document.getElementById('nextBlock');
+        const nextEl = document.querySelector('.next');
+        const blockEl = document.getElementById('nextBlock');
         nextEl.innerHTML = '';
+        nextEl.appendChild(blockEl);
+
+        blockEl.innerHTML = '';
         for (const [x, y] of SHAPES[type]) {
             const cell = document.createElement('div');
             cell.className = 'preview-cell';
             cell.style.gridColumn = x + 1;
             cell.style.gridRow = y + 1;
-            nextEl.appendChild(cell);
+            blockEl.appendChild(cell);
         }
         const label = document.createElement('div');
         label.className = 'preview-value';
@@ -1011,16 +1201,18 @@ class Gravity2048Scene extends Phaser.Scene {
 
     showGameOver(score, best) {
         const overlay = document.getElementById('gameover');
-        document.getElementById('finalText').textContent = `Final Score: ${score.toLocaleString()}\nBest: ${best.toLocaleString()}`;
+        document.getElementById('finalText').innerHTML = `Final Score: ${score.toLocaleString()}<br><hr>Best: ${best.toLocaleString()}`;
         overlay.classList.add('show');
     }
 
-    showCascadeMessage(count) {
+    showCascadeMessage(label) {
+        if (this._cascadeTimer) this._cascadeTimer.remove();
         const messageEl = document.getElementById('message');
-        messageEl.textContent = `Cascade ×${count}!`;
-        setTimeout(() => {
-            if (messageEl.textContent.startsWith('Cascade')) messageEl.textContent = '';
-        }, ANIMATION_TIMINGS.CASCADE_MESSAGE);
+        messageEl.textContent = label;
+        this._cascadeTimer = this.time.delayedCall(ANIMATION_TIMINGS.CASCADE_MESSAGE, () => {
+            messageEl.textContent = '';
+            this._cascadeTimer = null;
+        });
     }
 }
 
@@ -1048,8 +1240,8 @@ const config = {
     height: Gravity2048Scene.boardHeight,
     scene: Gravity2048Scene,
     render: {
-        pixelArt: true,
-        antialias: false
+        pixelArt: false,
+        antialias: true
     }
 };
 
@@ -1057,17 +1249,15 @@ const game = new Phaser.Game(config);
 
 function restartGame() {
     document.getElementById('gameover').classList.remove('show');
+    document.getElementById('message').textContent = '';
     const scene = game.scene.scenes[0];
-    scene.tweens.killAll();
-    Object.values(scene.sprites).forEach(s => { s.setVisible(false); s.destroy(); });
-    scene.sprites = {};
-    scene.prevGrid = null;
-    scene.prevFalling = [];
+    scene.handleGridReplaced();  // clear any existing sprites and diff cache
     scene.logic.newGame();
 }
 
 document.getElementById('restart').addEventListener('click', restartGame);
 document.getElementById('restartOverlay').addEventListener('click', restartGame);
+document.getElementById('resumeBtn').addEventListener('click', () => game.scene.scenes[0].togglePause());
 
 // ========== Responsive Resize Handling ==========
 let resizeTimer = null;
@@ -1109,10 +1299,16 @@ function handleResize() {
 
     // Invalidate the cached grid background so it regenerates at the new size
     scene.createBackgroundGrid();
+    scene.buildTileTextures();
 
     // Reset diff state so next render redraws everything
     scene.tweens.killAll();
-    Object.values(scene.sprites).forEach(s => { s.setVisible(false); s.destroy(); });
+    Object.values(scene.sprites).forEach(s => {
+        if (!s.destroyed) {
+            s.setVisible(false);
+            s.destroy();
+        }
+    });
     scene.sprites = {};
     scene.prevGrid = null;
     scene.prevFalling = [];
@@ -1120,11 +1316,6 @@ function handleResize() {
     // Full re-render (repositions every tile at the new cell size)
     scene.render();
 }
-
-window.addEventListener('resize', () => {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(handleResize, 150);   // debounce
-});
 
 const ro = new ResizeObserver(() => {
     clearTimeout(resizeTimer);
