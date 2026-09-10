@@ -4,65 +4,392 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Gravity 2048 — Phaser Version</title>
-    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.js" integrity="sha256-SUsGCepd5yz53CJAE0MkfQGpVapI+SZw8SGGgpZBg4E=" crossorigin="anonymous"></script>
     <style>
+        :root {
+            --gap: 4px;
+            --cell: clamp(24px, min(calc((100dvh - 192px - 19 * var(--gap)) / 20), calc((100vw - 280px - 22px) / 10)), 58px);
+            --board-w: 10;
+            --board-h: 20;
+            --bg: #11131a;
+            --panel: #1b1f2a;
+            --text: #f4f5f7;
+            --muted: #aeb4c2;
+            --accent: #7dd3fc;
+        }
+
         * {
+            box-sizing: border-box;
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
         }
+
         body {
-            background: #11131a;
+            min-height: 100dvh;
+            overflow-x: hidden;
+            background: radial-gradient(circle at 50% 0%, #252b3a 0, var(--bg) 52%);
+            color: var(--text);
             font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             display: flex;
             justify-content: center;
-            align-items: center;
-            min-height: 100dvh;
+            padding: 24px;
         }
-        #game {
-            border: 2px solid #343b4c;
+
+        .app {
+            width: min(920px, 100%);
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: end;
+            gap: 20px;
+            margin-bottom: 18px;
+        }
+
+        h1 {
+            font-size: 30px;
+            letter-spacing: -.03em;
+        }
+
+        .subtitle {
+            color: var(--muted);
+            margin-top: 4px;
+        }
+
+        .stats {
+            display: flex;
+            gap: 10px;
+        }
+
+        .stat {
+            background: var(--panel);
+            border: 1px solid #303747;
+            border-radius: 12px;
+            padding: 9px 14px;
+            min-width: 100px;
+            text-align: center;
+        }
+
+        .stat small {
+            display: block;
+            color: var(--muted);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+        }
+
+        .stat strong {
+            display: block;
+            font-size: 22px;
+            margin-top: 2px;
+        }
+
+        .layout {
+            display: flex;
+            justify-content: center;
+            gap: 22px;
+            align-items: flex-start;
+        }
+
+        .board-wrap {
+            position: relative;
+            padding: 9px;
+            background: #090b10;
+            border: 1px solid #343b4c;
             border-radius: 15px;
             box-shadow: 0 20px 60px #0008;
         }
-        .ui {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            color: #f4f5f7;
-            font-weight: bold;
-            z-index: 10;
+
+        #game {
+            display: block;   
         }
-        .score { font-size: 18px; margin-bottom: 8px; }
-        .best { font-size: 14px; color: #aeb4c2; }
+
+        .side {
+            width: 205px;
+            background: var(--panel);
+            border: 1px solid #303747;
+            border-radius: 15px;
+            padding: 16px;
+        }
+
+        .side h2 {
+            margin: 0 0 12px;
+            font-size: 15px;
+        }
+
+        .next {
+            height: 100px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            margin-bottom: 15px;
+            background: #11151e;
+            border-radius: 10px;
+            border: 1px solid #303747;
+        }
+
+        .next-block {
+            display: grid;
+            grid-template-columns: repeat(4, 18px);
+            grid-template-rows: repeat(2, 18px);
+            gap: 2px;
+        }
+
+        .preview-cell {
+            width: 18px;
+            height: 18px;
+            border-radius: 3px;
+            background: var(--accent);
+            box-shadow: inset 0 0 0 1px #ffffff35;
+        }
+
+        .preview-value {
+            font-size: 16px;
+            font-weight: 800;
+            color: var(--accent);
+        }
+
+        button {
+            width: 100%;
+            border: 1px solid #3b4558;
+            background: #252b38;
+            color: var(--text);
+            border-radius: 9px;
+            padding: 10px;
+            cursor: pointer;
+            font-weight: 650;
+        }
+
+        button:hover {
+            background: #303849;
+        }
+
+        .help {
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.55;
+            margin-top: 15px;
+        }
+
+        .message {
+            min-height: 24px;
+            text-align: center;
+            color: var(--accent);
+            font-weight: 700;
+            margin-top: 12px;
+        }
+
+        .overlay {
+            position: absolute;
+            inset: 9px;
+            display: none;
+            place-items: center;
+            background: #080a0fcc;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 5;
+        }
+
+        .overlay.show {
+            display: grid;
+        }
+
+        .overlay h2 {
+            font-size: 30px;
+            margin: 0 0 6px;
+        }
+
+        .overlay p {
+            color: var(--muted);
+            margin: 0 0 16px;
+        }
+
+        .overlay button {
+            width: auto;
+            padding: 10px 22px;
+        }
+
+        kbd {
+            background: #202633;
+            border: 1px solid #3a4354;
+            border-bottom-width: 2px;
+            border-radius: 5px;
+            padding: 2px 6px;
+            color: #fff;
+        }
+
+        @media (max-width: 720px) {
+            .layout {
+                gap: 10px;
+            }
+
+            .side {
+                width: 150px;
+                padding: 12px;
+            }
+
+            .side h2 {
+                font-size: 13px;
+            }
+
+            .next {
+                height: 80px;
+                gap: 4px;
+            }
+
+            .next-block {
+                grid-template-columns: repeat(4, 14px);
+                grid-template-rows: repeat(2, 14px);
+            }
+
+            .preview-cell {
+                width: 14px;
+                height: 14px;
+            }
+
+            .preview-value {
+                font-size: 13px;
+            }
+        }
+
+        @media (max-width: 520px) {
+            :root {
+                --gap: 3px;
+                --cell: clamp(20px, calc((100dvh - 120px - 19 * var(--gap)) / 20), 48px);
+            }
+
+            body {
+                padding: 10px;
+            }
+
+            .layout {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .side {
+                width: min(100%, 280px);
+            }
+
+            .stats {
+                gap: 6px;
+            }
+
+            .stat {
+                padding: 6px 10px;
+                min-width: 80px;
+            }
+
+            .stat small {
+                font-size: 10px;
+            }
+
+            .stat strong {
+                font-size: 18px;
+            }
+        }
+
+        @media (max-height: 500px) {
+            :root {
+                --cell: clamp(18px, calc((100dvh - 80px - 19 * var(--gap)) / 20), 40px);
+            }
+
+            body {
+                padding: 8px;
+            }
+
+            header {
+                margin-bottom: 8px;
+            }
+
+            h1 {
+                font-size: 22px;
+            }
+
+            .subtitle {
+                font-size: 12px;
+            }
+        }
     </style>
 </head>
 <body>
-<div class="ui">
-    <div class="score">Score: <span id="score">0</span></div>
-    <div class="best">Best: <span id="best">0</span></div>
+<div class="app">
+    <header>
+        <div>
+            <h1>Gravity 2048</h1>
+            <div class="subtitle">Tetris gravity + 2048 merging</div>
+        </div>
+        <div class="stats">
+            <div class="stat"><small>Score</small><strong id="score">0</strong></div>
+            <div class="stat"><small>Best</small><strong id="best">0</strong></div>
+        </div>
+    </header>
+
+    <div class="layout">
+        <div>
+            <div class="board-wrap">
+                <div id="game"></div>
+                <div class="overlay" id="gameover">
+                    <div>
+                        <h2>Game Over</h2>
+                        <p id="finalText"></p>
+                        <button id="restartOverlay">Play again</button>
+                    </div>
+                </div>
+            </div>
+            <div class="message" id="message"></div>
+        </div>
+
+        <aside class="side">
+            <h2>Next block</h2>
+            <div class="next">
+                <div id="nextBlock" class="next-block"></div>
+            </div>
+            <button id="restart">New game</button>
+            <div class="help">
+                <b>Controls</b><br>
+                <kbd>←</kbd> <kbd>→</kbd> move<br>
+                <kbd>↓</kbd> soft drop<br>
+                <kbd>↑</kbd> / <kbd>X</kbd> rotate clockwise<br>
+                <kbd>Z</kbd> rotate counter-clockwise<br>
+                <kbd>Space</kbd> hard drop<br><br>
+                <kbd>R</kbd> restart<br>
+                <kbd>P</kbd> pause<br>
+                Blocks merge only when the falling block lands on an identical value.
+                A full row clears. Clearing a row triggers gravity, which can cause further merges and clears.
+            </div>
+        </aside>
+    </div>
 </div>
-<div id="game"></div>
+<div class="overlay" id="paused">
+    <div>
+        <h2>Paused</h2>
+        <p>Press <kbd>P</kbd> to resume</p>
+        <button id="resumeBtn">Resume</button>
+    </div>
+</div>
 
 <script>
 // ============================================================
 // Gravity 2048 — Phaser Game Logic & Rendering
 // ============================================================
 
-// ========== Constants & Configuration ==========
 const BOARD_WIDTH = 10;
 const BOARD_HEIGHT = 20;
-const FALL_INTERVAL = 600; // ms between gravity steps
+const FALL_INTERVAL = 600;
 
-// Animation timings
 const ANIMATION_TIMINGS = {
     MERGE: 65,
     MERGE_PAUSE: 90,
     CLEAR: 170,
     CLEAR_PAUSE: 110,
-    SPAWN: 130
+    SPAWN: 130,
+    CASCADE_MESSAGE: 1000
 };
 
-// Color palette for tile values
 const TILE_COLORS = {
     2: 0xd9f99d,
     4: 0xbef264,
@@ -83,9 +410,8 @@ const TEXT_COLORS = {
     dark: 0xffffff
 };
 
-// Tetromino shapes
 const SHAPES = {
-    I: [[0, 1], [1, 1], [2, 1], [3, 1]],
+    I: [[0, 0], [1, 0], [2, 0], [3, 0]],
     O: [[1, 0], [2, 0], [1, 1], [2, 1]],
     T: [[1, 0], [0, 1], [1, 1], [2, 1]],
     S: [[1, 0], [2, 0], [0, 1], [1, 1]],
@@ -94,7 +420,25 @@ const SHAPES = {
     L: [[2, 0], [0, 1], [1, 1], [2, 1]]
 };
 
-// ========== Game State (pure logic, no Phaser) ==========
+// Precompute all rotations for each shape, normalised to the top-left of the bounding box
+const PRECOMPUTED_SHAPES = {};
+for (const [type, baseCells] of Object.entries(SHAPES)) {
+    PRECOMPUTED_SHAPES[type] = [];
+    let cells = baseCells;
+    for (let r = 0; r < 4; r++) {
+        // Normalise so the top-left of the bounding box is (0,0)
+        const minX = Math.min(...cells.map(c => c[0]));
+        const minY = Math.min(...cells.map(c => c[1]));
+        PRECOMPUTED_SHAPES[type][r] =
+            cells.map(([x, y]) => [x - minX, y - minY]);
+        // Rotate 90° clockwise for the next state: (x,y) → (3−y, x)
+        if (type !== 'O') {
+            cells = cells.map(([x, y]) => [3 - y, x]);
+        }
+    }
+}
+
+// ========== Game Logic ==========
 class GameLogic {
     constructor() {
         this.grid = [];
@@ -102,16 +446,20 @@ class GameLogic {
         this.nextType = null;
         this.nextValue = null;
         this.score = 0;
-        this.best = Number(localStorage.getItem('gravity2048-best') || 0);
+        try {
+            this.best = Number(localStorage.getItem('gravity2048-best')) || 0;
+        } catch {
+            this.best = 0;
+        }
         this.running = false;
+        this.resolving = false;
         this.generation = 0;
         this.cascadeClearCount = 0;
         this.maxBoardValue = 2;
-        this.fallTimer = null;
-        this.callbacks = {}; // render, lock, merge, clear, etc.
+        this.callbacks = {};
+        this._sleep = null;
     }
 
-    // Register callback functions for rendering updates
     on(event, callback) {
         if (!this.callbacks[event]) this.callbacks[event] = [];
         this.callbacks[event].push(callback);
@@ -123,7 +471,9 @@ class GameLogic {
         }
     }
 
-    // Tetromino operations
+    setSleep(fn) { this._sleep = fn ?? ((ms) => new Promise(r => setTimeout(r, ms))); }
+    sleep(ms)    { return this._sleep(ms); }
+
     static randomType() {
         const types = Object.keys(SHAPES);
         return types[Math.floor(Math.random() * types.length)];
@@ -132,7 +482,11 @@ class GameLogic {
     randomValue() {
         const levels = [];
         for (let v = 2; v <= this.maxBoardValue; v *= 2) levels.push(v);
-        const weights = levels.map((_, i) => Math.pow(0.5, i));
+        // As maxBoardValue grows, the decay base increases toward 0.92,
+        // flattening the distribution and favouring higher values.
+        const shift = 1 + 0.05 * Math.log2(this.maxBoardValue / 2);
+        const decay = Math.min(0.92, 0.75 * shift);
+        const weights = levels.map((_, i) => Math.pow(decay, i));
         const total = weights.reduce((a, b) => a + b, 0);
         let r = Math.random() * total;
         for (let i = 0; i < levels.length; i++) {
@@ -142,24 +496,26 @@ class GameLogic {
         return levels[levels.length - 1];
     }
 
+     getFallInterval() {
+        if (!this.current) return FALL_INTERVAL;
+        // steps: 0 for value 2, 1 for 4, 2 for 8, …
+        const steps = Math.log2(this.current.value / 2);
+        const factor = Math.pow(0.85, steps);
+        return Math.max(150, Math.round(FALL_INTERVAL * factor));
+    }
+
     makePiece(type, value) {
-        return { type, value, rotation: 0, x: 3, y: 0 };
+        const widths = { I: 4, O: 2, T: 3, S: 3, Z: 3, J: 3, L: 3 };
+        const x = Math.floor((BOARD_WIDTH - widths[type]) / 2);
+
+        return { type, value, rotation: 0, x: x, y: 0 };
     }
 
-    // Get absolute cell positions for a piece
     cells(piece, rotation = piece.rotation, px = piece.x, py = piece.y) {
-        let out = SHAPES[piece.type].map(([x, y]) => [x, y]);
-        if (piece.type !== 'O') {
-            for (let r = 0; r < rotation % 4; r++) {
-                out = out.map(([x, y]) => [3 - y, x]);
-            }
-        }
-        const minX = Math.min(...out.map(c => c[0]));
-        const minY = Math.min(...out.map(c => c[1]));
-        return out.map(([x, y]) => [x - minX + px, y - minY + py]);
+        const norm = PRECOMPUTED_SHAPES[piece.type][((rotation % 4) + 4) % 4];
+        return norm.map(([x, y]) => [x + px, y + py]);
     }
 
-    // Check collision with grid/bounds
     collides(piece, dx = 0, dy = 0, rotation = piece.rotation) {
         for (const [x, y] of this.cells(piece, rotation, piece.x + dx, piece.y + dy)) {
             if (x < 0 || x >= BOARD_WIDTH || y < 0 || y >= BOARD_HEIGHT) return true;
@@ -168,9 +524,9 @@ class GameLogic {
         return false;
     }
 
-    // Start/restart game
     newGame() {
         this.generation++;
+        this.emit('stopFall');
         this.grid = Array.from({ length: BOARD_HEIGHT }, () => Array(BOARD_WIDTH).fill(null));
         this.score = 0;
         this.cascadeClearCount = 0;
@@ -180,10 +536,9 @@ class GameLogic {
         this.nextValue = this.randomValue();
         this.spawn();
         this.emit('render');
-        this.scheduleFall();
+        this.emit('startFall');
     }
 
-    // Promote next to current, spawn next
     spawn() {
         this.current = this.makePiece(this.nextType, this.nextValue);
         this.nextType = GameLogic.randomType();
@@ -195,7 +550,6 @@ class GameLogic {
         this.emit('spawn', this.nextType, this.nextValue);
     }
 
-    // Attempt to move piece
     tryMove(dx, dy) {
         if (!this.current || this.collides(this.current, dx, dy)) return false;
         this.current.x += dx;
@@ -203,9 +557,8 @@ class GameLogic {
         return true;
     }
 
-    // Player move (locks on failed downward move)
     move(dx, dy) {
-        if (!this.running || !this.current) return false;
+        if (!this.running || this.resolving || !this.current) return false;
         if (this.tryMove(dx, dy)) {
             this.emit('render');
             return true;
@@ -214,9 +567,8 @@ class GameLogic {
         return false;
     }
 
-    // Rotate with wall kicks (SRS-style)
     rotate(dir = 1) {
-        if (!this.running || !this.current || this.current.type === 'O') return;
+        if (!this.running || !this.current || this.resolving || this.current.type === 'O') return;
         const target = (this.current.rotation + dir + 4) % 4;
         const kicks = [
             [0, 0], [-1, 0], [1, 0], [-2, 0], [2, 0],
@@ -234,56 +586,52 @@ class GameLogic {
         return false;
     }
 
-    // Hard drop to bottom
     hardDrop() {
-        if (!this.running || !this.current) return;
+        if (!this.running || !this.current || this.resolving) return;
         let distance = 0;
         while (this.tryMove(0, 1)) distance++;
         this.score += distance * 2;
+        this.emit('scoreUpdated', this.score);
         this.lockCurrent();
     }
 
-    // Lock piece into grid
     async lockCurrent() {
-        if (!this.running || !this.current) return;
-        const gen = this.generation;
-        const p = this.current;
-        this.current = null;
+        if (!this.running || !this.current || this.resolving) return;
+        this.resolving = true;
+        this.emit('stopFall');             // kill the repeating tick immediately
+        try {
+            const gen = this.generation;
+            const p = this.current;
+            this.current = null;
 
-        const newCells = new Set();
-        for (const [x, y] of this.cells(p)) {
-            if (y < 0 || y >= BOARD_HEIGHT || x < 0 || x >= BOARD_WIDTH) {
-                this.endGame();
-                return;
+            const newCells = new Set();
+            for (const [x, y] of this.cells(p)) {
+                if (y < 0 || y >= BOARD_HEIGHT || x < 0 || x >= BOARD_WIDTH) {
+                    this.endGame();
+                    return;
+                }
+                this.grid[y][x] = p.value;
+                newCells.add(`${x},${y}`);
             }
-            this.grid[y][x] = p.value;
-            newCells.add(`${x},${y}`);
+
+            this.emit('render');
+            await this.resolveBoard(newCells, gen, true);
+            if (!this.running || this.generation !== gen) return;
+
+            this.spawn();
+            this.emit('render');
+            this.emit('startFall');
+        } finally {
+            this.resolving = false;
         }
-
-        this.emit('render');
-        await this.resolveBoard(newCells, gen, true);
-        if (!this.running || this.generation !== gen) return;
-
-        this.spawn();
-        this.emit('render');
-        this.scheduleFall();
     }
 
-    // Schedule automatic gravity
-    scheduleFall() {
-        clearInterval(this.fallTimer);
-        this.fallTimer = setInterval(() => {
-            if (!this.running || !this.current) return;
-            if (!this.tryMove(0, 1)) this.lockCurrent();
-            else this.emit('render');
-        }, FALL_INTERVAL);
-    }
-
-    // Main resolution: merges -> clears -> cascade
     async resolveBoard(activeCells, gen, allowGroupDrop = true) {
         this.cascadeClearCount = 0;
+        let totalRowsCleared = 0;
+        let safety = BOARD_HEIGHT * BOARD_WIDTH;
 
-        while (true) {
+        while (safety-- > 0) {
             const hadMerges = await this.resolveVerticalMerges(activeCells, gen, allowGroupDrop);
             allowGroupDrop = false;
             if (this.generation !== gen || !this.running) return;
@@ -298,6 +646,7 @@ class GameLogic {
 
             if (rows.length) {
                 this.cascadeClearCount++;
+                totalRowsCleared += rows.length;
                 const raw = rows.reduce((sum, r) => sum + this.grid[r].reduce((a, v) => a + (v || 0), 0), 0);
                 const multiplier = Math.max(1, this.cascadeClearCount);
                 this.score += raw * multiplier;
@@ -308,19 +657,23 @@ class GameLogic {
 
                 activeCells = this.computeFallenCellsFromGrid(rows);
                 this.removeRowsWithCollapse(rows);
+                //the grid reference changed; scene must drop its diff cache
+                this.emit('gridReplaced');
                 this.emit('render');
                 await this.sleep(ANIMATION_TIMINGS.CLEAR_PAUSE);
                 if (this.generation !== gen || !this.running) return;
             }
         }
 
-        if (this.cascadeClearCount > 1) {
-            this.emit('cascade', this.cascadeClearCount);
+        if (totalRowsCleared >= 2) {
+            const label = this.cascadeClearCount > 1 
+                ? `Cascade ×${totalRowsCleared}!`
+                : `Multi-clear ×${totalRowsCleared}!`;
+            this.emit('cascade', label);
         }
         this.updateScore();
     }
 
-    // Vertical merge pass
     async resolveVerticalMerges(activeCells, gen, allowGroupDrop = false) {
         const toMerge = [];
         for (let y = BOARD_HEIGHT - 2; y >= 0; y--) {
@@ -353,15 +706,16 @@ class GameLogic {
             activeCells.delete(keyBelow);
             this.score += this.grid[y + 1][x];
             if (this.grid[y + 1][x] > this.maxBoardValue) this.maxBoardValue = this.grid[y + 1][x];
-
-            this.emit('merge', x, y + 1, this.grid[y + 1][x]);
         }
 
         this.emit('render');
+        for (const [x, y] of toMerge) {
+            this.emit('merge', x, y + 1, this.grid[y + 1][x]);
+        }
+
         await this.sleep(ANIMATION_TIMINGS.MERGE);
         if (this.generation !== gen || !this.running) return false;
 
-        // Group drop
         if (allowGroupDrop && activeCells.size > 0) {
             let remaining = [...activeCells].map(k => k.split(',').map(Number));
             while (remaining.length > 0 && remaining.every(
@@ -380,7 +734,6 @@ class GameLogic {
             }
         }
 
-        // Chain merge
         for (const [cx, cy] of [...activeCells].map(k => k.split(',').map(Number)).sort((a, b) => b[1] - a[1])) {
             let mergeY = cy;
             while (mergeY + 1 < BOARD_HEIGHT && this.grid[mergeY][cx] !== null &&
@@ -397,10 +750,27 @@ class GameLogic {
                     this.grid[mergeY][cx] = null;
                     mergeY++;
                 }
-                this.emit('merge', cx, mergeY, this.grid[mergeY][cx]);
                 this.emit('render');
+                this.emit('merge', cx, mergeY, this.grid[mergeY][cx]);
                 await this.sleep(ANIMATION_TIMINGS.MERGE);
                 if (this.generation !== gen || !this.running) return false;
+
+                // Drop any remaining active cells in this column that are now floating
+                let remaining = [...activeCells].map(k => k.split(',').map(Number)).filter(([x]) => x === cx);
+                while (remaining.length > 0 && remaining.every(
+                    ([rcx, rcy]) => rcy + 1 < BOARD_HEIGHT && this.grid[rcy + 1][rcx] === null
+                )) {
+                    for (const [rcx, rcy] of remaining.sort((a, b) => b[1] - a[1])) {
+                        this.grid[rcy + 1][rcx] = this.grid[rcy][rcx];
+                        this.grid[rcy][rcx] = null;
+                        activeCells.delete(`${rcx},${rcy}`);
+                        activeCells.add(`${rcx},${rcy + 1}`);
+                    }
+                    remaining = [...activeCells].map(k => k.split(',').map(Number)).filter(([x]) => x === cx);
+                    this.emit('render');
+                    await this.sleep(ANIMATION_TIMINGS.MERGE);
+                    if (this.generation !== gen || !this.running) return false;
+                }
             }
         }
 
@@ -448,7 +818,11 @@ class GameLogic {
     updateScore() {
         if (this.score > this.best) {
             this.best = this.score;
-            localStorage.setItem('gravity2048-best', this.best);
+            try {
+                localStorage.setItem('gravity2048-best', this.best);
+            } catch {
+                // Ignore localStorage errors
+            }
             this.emit('bestUpdated', this.best);
         }
         this.emit('scoreUpdated', this.score);
@@ -456,12 +830,7 @@ class GameLogic {
 
     endGame() {
         this.running = false;
-        clearInterval(this.fallTimer);
         this.emit('gameOver', this.score, this.best);
-    }
-
-    sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
     }
 }
 
@@ -470,30 +839,44 @@ class Gravity2048Scene extends Phaser.Scene {
     constructor() {
         super({ key: 'Gravity2048' });
         this.logic = new GameLogic();
-        this.sprites = {}; // { 'x,y': sprite }
+        this.sprites = {};       // keyed by "x,y" (board) or "fx,y" (falling)
+        this.prevGrid = null;    // deep copy of grid after last render
+        this.prevFalling = [];   // falling piece cells from last render
         this.cellSize = 0;
+        this.gap = 0;
         this.boardOffsetX = 0;
         this.boardOffsetY = 0;
+        this.fallEvent = null;     
     }
 
     create() {
-        // Calculate cell size based on canvas
-        this.cellSize = (this.cameras.main.width - 40) / BOARD_WIDTH;
+        this.cellSize = Gravity2048Scene.cellSize;
+        this.gap = Gravity2048Scene.gap;
+        this.boardOffsetX = 0;
+        this.boardOffsetY = 0;
 
-        this.boardOffsetX = 20;
-        this.boardOffsetY = 20;
+        this.createBackgroundGrid();
+        this.buildTileTextures();
+        
+        // ── Inject Phaser-backed sleep into the logic ──
+        this.logic.setSleep((ms) =>
+            new Promise(resolve => this.time.delayedCall(ms, resolve))
+        );
 
-        // Register game callbacks
+        // Register callbacks
         this.logic.on('render', () => this.render());
-        this.logic.on('spawn', (type, value) => this.showNextPreview(type, value));
+        this.logic.on('spawn', (type, value) => this.updateNextPreview(type, value));
         this.logic.on('merge', (x, y, value) => this.animateMerge(x, y, value));
         this.logic.on('clearRows', (rows) => this.animateClearRows(rows));
         this.logic.on('scoreUpdated', (score) => this.updateScoreUI(score));
         this.logic.on('bestUpdated', (best) => this.updateBestUI(best));
         this.logic.on('gameOver', (score, best) => this.showGameOver(score, best));
         this.logic.on('cascade', (count) => this.showCascadeMessage(count));
+        this.logic.on('startFall', () => this.startFallTimer());
+        this.logic.on('stopFall', () => this.stopFallTimer());
+        this.logic.on('gridReplaced', () => this.handleGridReplaced());
 
-        // Input handling
+        // Input
         this.input.keyboard.on('keydown', (e) => this.handleKeyPress(e));
 
         // Start game
@@ -502,123 +885,310 @@ class Gravity2048Scene extends Phaser.Scene {
         this.updateBestUI(this.logic.best);
     }
 
+    // ──────────────────────────────────────────────
+    // Phaser-driven fall timer
+    // ──────────────────────────────────────────────
+    startFallTimer() {
+        this.stopFallTimer();
+        const interval = this.logic.getFallInterval();
+        this.fallEvent = this.time.addEvent({
+            delay: interval,
+            callback: this.fallTick,
+            callbackScope: this,
+            repeat: -1
+        });
+    }
+
+    stopFallTimer() {
+        if (this.fallEvent) {
+            this.fallEvent.remove();
+            this.fallEvent = null;
+        }
+    }
+
+    fallTick() {
+        if (this.paused) return;
+        if (!this.logic.running || !this.logic.current) {
+            this.stopFallTimer();
+            return;
+        }
+        if (!this.logic.tryMove(0, 1)) {
+            this.logic.lockCurrent();       // lockCurrent will stop/restart the timer
+        } else {
+            this.logic.emit('render');
+        }
+    }
+
+    buildTileTextures() {
+        const pad    = 2;
+        const size   = this.cellSize;
+        const inner  = size - pad * 2;
+        const radius = 4;
+
+        const values = Object.keys(TILE_COLORS).map(Number);
+
+        for (const val of values) {
+            const color     = TILE_COLORS[val];
+            const textColor = val >= 64 ? '#ffffff' : '#111111';
+            const str       = String(val);
+
+            // Font sizing — match original: clamp(12, cell * 0.45, 22)
+            const fontPx = Math.min(22, Math.max(12, Math.round(this.cellSize * 0.45)));
+
+            const rt = this.make.renderTexture({
+                width: this.cellSize, height: this.cellSize, add: false
+            });
+
+            // ── Background ──
+            const gfx = this.make.graphics({ x: 0, y: 0, add: false });
+            gfx.fillStyle(color, 1);
+            gfx.fillRoundedRect(pad, pad, inner, inner, radius);
+            const outlineColor = val >= 64 ? 0xffffff : 0xffff26;
+            gfx.lineStyle(3, outlineColor, 1);
+            gfx.strokeRoundedRect(pad, pad, inner, inner, radius);
+            rt.draw(gfx, 0, 0);
+            gfx.destroy();
+
+            // ── Number ──
+            const textStyle = {
+                fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+                fontSize:   `${fontPx}px`,
+                fontStyle:  'bold',
+                color:      textColor,
+                align:      'center',
+            };
+
+            const txt = this.make.text({ x: 0, y: 0, text: str, style: textStyle });
+            txt.setOrigin(0.5, 0.5);
+            txt.setPosition(this.cellSize / 2, this.cellSize / 2);
+            rt.draw(txt);
+            txt.destroy();
+
+            // ── Save & clean up ──
+            rt.saveTexture(`tile-${val}`);
+            rt.destroy();
+        }
+    }
+
     handleKeyPress(event) {
         const key = event.key.toLowerCase();
-        if (key === 'arrowleft') this.logic.move(-1, 0);
-        else if (key === 'arrowright') this.logic.move(1, 0);
-        else if (key === 'arrowdown') this.logic.move(0, 1);
-        else if (key === 'arrowup' || key === 'x') this.logic.rotate(1);
-        else if (key === 'z') this.logic.rotate(-1);
-        else if (key === ' ') {
+        if (key === 'p') {
+            this.togglePause();
+            return;
+        }
+        if (this.paused) return;
+        // Prevent the browser from scrolling / triggering defaults
+        const gameKeys = ['arrowleft','arrowright','arrowdown','arrowup',' ', 'x', 'z', 'r'];
+        const arrowKeys = ['arrowleft','arrowright','arrowdown'];
+        if (gameKeys.includes(key)) {
             event.preventDefault();
-            this.logic.hardDrop();
-        } else if (key === 'r') this.logic.newGame();
+        }
+
+        // Ignore OS key-repeat (holding a key fires keydown repeatedly)
+        if (!arrowKeys.includes(key) && event.repeat) return;
+
+        if (key === 'arrowleft')       this.logic.move(-1, 0);
+        else if (key === 'arrowright') this.logic.move(1, 0);
+        else if (key === 'arrowdown')  this.logic.move(0, 1);
+        else if (key === 'arrowup' || key === 'x') this.logic.rotate(1);
+        else if (key === 'z')          this.logic.rotate(-1);
+        else if (key === ' ')         this.logic.hardDrop();
+        else if (key === 'r') {
+            document.getElementById('gameover').classList.remove('show');
+            document.getElementById('message').textContent = '';
+            this.handleGridReplaced();
+            this.logic.newGame();
+        }
+    }
+
+    togglePause() {
+        if (!this.logic.running) return;
+        if (this.paused) {
+            this.paused = false;
+            this.logic.emit('startFall');
+            document.getElementById('paused').classList.remove('show');
+        } 
+        else {
+            this.paused = true;
+            this.logic.emit('stopFall');
+            document.getElementById('paused').classList.add('show');
+        }
+    }        
+
+    handleGridReplaced() {
+        // Kill any in-flight tweens (clear-shrink, merge-pulse) so we don't
+        // leave orphaned targets.
+        for (const s of Object.values(this.sprites))
+            if (s && !s.destroyed) this.tweens.killTweensOf(s);
+
+        // Destroy every tracked sprite (board + falling).
+        for (const key of Object.keys(this.sprites)) {
+            const s = this.sprites[key];
+            if (s && !s.destroyed) {
+                s.destroy();
+            }
+            delete this.sprites[key];
+        }
+
+        // Invalidate the diff cache → next render() redraws the entire board.
+        this.prevGrid = null;
+        this.prevFalling = [];
+    }
+
+    // Called once (and on resize). Draws the static background texture.
+    createBackgroundGrid() {
+        const gap = this.gap;
+        const boardWidth  = this.cellSize * BOARD_WIDTH  + (BOARD_WIDTH  - 1) * gap;
+        const boardHeight = this.cellSize * BOARD_HEIGHT + (BOARD_HEIGHT - 1) * gap;
+
+        if (this.textures.exists('gridBg')) this.textures.remove('gridBg');
+        const graphics = this.make.graphics({ x: 0, y: 0, add: false });
+        graphics.fillStyle(0x0e1118, 1);
+        graphics.fillRect(0, 0, boardWidth, boardHeight);
+        for (let y = 0; y < BOARD_HEIGHT; y++) {
+            for (let x = 0; x < BOARD_WIDTH; x++) {
+                const px = x * (this.cellSize + gap);
+                const py = y * (this.cellSize + gap);
+                graphics.fillStyle(0x171b24, 1);
+                graphics.fillRoundedRect(px, py, this.cellSize, this.cellSize, 8);
+                graphics.lineStyle(1, 0x242a37, 1);
+                graphics.strokeRoundedRect(px, py, this.cellSize, this.cellSize, 8);
+            }
+        }
+        graphics.generateTexture('gridBg', boardWidth, boardHeight);
+        graphics.destroy();
+
+        if (this.bgImage) this.bgImage.destroy();
+        this.bgImage = this.add.image(0, 0, 'gridBg').setOrigin(0, 0).setDepth(-1);
+    }
+
+    // Destroy and remove a single sprite pair by key.
+    _destroySprite(key) {
+       const s = this.sprites[key];
+       if (!s) return;
+       this.tweens.killTweensOf(s);
+       s.setVisible(false);
+       s.destroy();
+       delete this.sprites[key];
     }
 
     render() {
-        // Clear old sprites
-        Object.values(this.sprites).forEach(sprite => sprite.destroy());
-        this.sprites = {};
+        const curGrid    = this.logic.grid;
+        const prevGrid   = this.prevGrid;
+        const curFalling = this.logic.current
+            ? this.logic.cells(this.logic.current).map(([x, y]) => `${x},${y}`)
+            : [];
 
-        // Draw background grid
-        this.drawBackgroundGrid();
-
-        // Draw settled tiles
+        // --- Board cells: only update what changed ---
         for (let y = 0; y < BOARD_HEIGHT; y++) {
             for (let x = 0; x < BOARD_WIDTH; x++) {
-                if (this.logic.grid[y][x] !== null) {
-                    this.drawTile(x, y, this.logic.grid[y][x]);
+                const cur  = curGrid[y][x];
+                const prev = prevGrid ? prevGrid[y][x] : undefined;
+                if (cur === prev) continue;
+                const key = `${x},${y}`;
+                this._destroySprite(key);
+                if (cur !== null) this.drawTile(x, y, cur);
+            }
+        }
+
+        // --- Falling piece: clear old positions, draw new ones ---
+        for (const key of this.prevFalling) {
+            this._destroySprite(`f${key}`);
+        }
+        for (const key of curFalling) {
+            this.drawTile(...key.split(',').map(Number), this.logic.current.value, true, 'f');
+        }
+
+        // Safety: make sure every non-null cell has a sprite.
+        // Catches any edge case where a sprite was removed externally
+        // (e.g., by an animation) but the diff didn't notice.
+        for (let y = 0; y < BOARD_HEIGHT; y++) {
+            for (let x = 0; x < BOARD_WIDTH; x++) {
+                const key = `${x},${y}`;
+                if (curGrid[y][x] !== null && !this.sprites[key]) {
+                    this.drawTile(x, y, curGrid[y][x]);
                 }
             }
         }
 
-        // Draw falling piece
-        if (this.logic.current) {
-            for (const [x, y] of this.logic.cells(this.logic.current)) {
-                this.drawTile(x, y, this.logic.current.value, true);
-            }
-        }
+        // Snapshot grid for next diff (shallow row copy is enough — values are primitives)
+        this.prevGrid   = curGrid.map(row => row.slice());
+        this.prevFalling = curFalling;
     }
 
-    drawBackgroundGrid() {
-        const graphics = this.make.graphics({ x: 0, y: 0, add: false });
-        graphics.fillStyle(0x090b10, 1);
-        graphics.fillRect(
-            this.boardOffsetX - 5,
-            this.boardOffsetY - 5,
-            BOARD_WIDTH * this.cellSize + 10,
-            BOARD_HEIGHT * this.cellSize + 10
+    drawTile(x, y, value, isFalling = false, keyPrefix = '') {
+        const posX = this.boardOffsetX + x * (this.cellSize + this.gap);
+        const posY = this.boardOffsetY + y * (this.cellSize + this.gap);
+
+        const texName = `tile-${TILE_COLORS[value] ? value : 4096}`;  // fallback for values beyond 4096
+
+        const img = this.add.image(
+            posX + this.cellSize / 2,
+            posY + this.cellSize / 2,
+            texName
         );
-        graphics.generateTexture('gridBg', BOARD_WIDTH * this.cellSize + 10, BOARD_HEIGHT * this.cellSize + 10);
-        graphics.destroy();
+        img.setDepth(isFalling ? 2 : 1);
+        if (isFalling) img.setAlpha(0.8);
 
-        const bg = this.add.image(this.boardOffsetX - 5, this.boardOffsetY - 5, 'gridBg');
-        bg.setOrigin(0, 0);
-        bg.setDepth(-1);
-    }
-
-    drawTile(x, y, value, isFalling = false) {
-        const posX = this.boardOffsetX + x * this.cellSize;
-        const posY = this.boardOffsetY + y * this.cellSize;
-
-        const color = TILE_COLORS[value] || TILE_COLORS[4096];
-        const textColor = value >= 64 ? TEXT_COLORS.dark : TEXT_COLORS.light;
-
-        // Background rectangle
-        const tile = this.add.rectangle(posX + this.cellSize / 2, posY + this.cellSize / 2, this.cellSize - 4, this.cellSize - 4, color, 1);
-        tile.setStrokeStyle(2, 0xffffff28);
-        tile.setDepth(isFalling ? 2 : 1);
-
-        // Text
-        const text = this.add.text(posX + this.cellSize / 2, posY + this.cellSize / 2, value.toString(), {
-            fontSize: `${Math.max(12, this.cellSize * 0.45)}px`,
-            fontStyle: 'bold',
-            color: `#${textColor.toString(16).padStart(6, '0')}`
-        });
-        text.setOrigin(0.5, 0.5);
-        text.setDepth(isFalling ? 2 : 1);
-
-        if (isFalling) {
-            tile.setAlpha(0.8);
-            text.setAlpha(0.8);
-        }
-
-        const key = `${x},${y}`;
-        this.sprites[key] = tile;
-        this.sprites[`${key}-text`] = text;
+        this.sprites[`${keyPrefix}${x},${y}`] = img;
     }
 
     animateMerge(x, y, value) {
-        const key = `${x},${y}`;
-        if (this.sprites[key]) {
-            this.tweens.add({
-                targets: this.sprites[key],
-                scale: 1.1,
-                duration: 100,
-                yoyo: true
-            });
-        }
+        const key    = `${x},${y}`;
+       const img = this.sprites[key];
+       if (!img) return;
+       this.tweens.add({
+           targets: img,
+           scale: 1.15,
+           duration: ANIMATION_TIMINGS.MERGE,
+           yoyo: true
+       });
     }
 
     animateClearRows(rows) {
         rows.forEach(y => {
             for (let x = 0; x < BOARD_WIDTH; x++) {
-                const key = `${x},${y}`;
-                if (this.sprites[key]) {
-                    this.tweens.add({
-                        targets: [this.sprites[key], this.sprites[`${key}-text`]],
-                        scale: 0.2,
-                        alpha: 0,
-                        duration: ANIMATION_TIMINGS.CLEAR,
-                        ease: 'Quad.easeIn'
-                    });
-                }
+                const key  = `${x},${y}`;
+                const img  = this.sprites[key];
+                if (!img) continue;
+
+                // Do NOT delete from this.sprites here.
+                // The entry stays until the object is actually destroyed.
+                this.tweens.add({
+                    targets: img,
+                    scale: 0.2,
+                    alpha: 0,
+                    duration: ANIMATION_TIMINGS.CLEAR,
+                    ease: 'Quad.easeIn',
+                    onComplete: () => {
+                        if (!img.destroyed) img.destroy();
+                        // Now that the object is gone, drop the bookkeeping entry.
+                        delete this.sprites[key];
+                    }
+                });
             }
         });
     }
 
-    showNextPreview(type, value) {
-        // TODO: Show next piece preview
+
+    updateNextPreview(type, value) {
+        const nextEl = document.querySelector('.next');
+        const blockEl = document.getElementById('nextBlock');
+        nextEl.innerHTML = '';
+        nextEl.appendChild(blockEl);
+
+        blockEl.innerHTML = '';
+        for (const [x, y] of SHAPES[type]) {
+            const cell = document.createElement('div');
+            cell.className = 'preview-cell';
+            cell.style.gridColumn = x + 1;
+            cell.style.gridRow = y + 1;
+            blockEl.appendChild(cell);
+        }
+        const label = document.createElement('div');
+        label.className = 'preview-value';
+        label.textContent = value;
+        nextEl.appendChild(label);
     }
 
     updateScoreUI(score) {
@@ -630,51 +1200,128 @@ class Gravity2048Scene extends Phaser.Scene {
     }
 
     showGameOver(score, best) {
-        const text = `Final Score: ${score.toLocaleString()}\nBest: ${best.toLocaleString()}`;
-        this.add.text(this.cameras.main.width / 2, this.cameras.main.height / 2, text, {
-            fontSize: '32px',
-            color: '#f4f5f7',
-            align: 'center'
-        }).setOrigin(0.5, 0.5).setDepth(10);
-
-        this.add.text(this.cameras.main.width / 2, this.cameras.main.height / 2 + 80, 'Press R to restart', {
-            fontSize: '16px',
-            color: '#7dd3fc',
-            align: 'center'
-        }).setOrigin(0.5, 0.5).setDepth(10);
+        const overlay = document.getElementById('gameover');
+        document.getElementById('finalText').innerHTML = `Final Score: ${score.toLocaleString()}<br><hr>Best: ${best.toLocaleString()}`;
+        overlay.classList.add('show');
     }
 
-    showCascadeMessage(count) {
-        const text = this.add.text(this.cameras.main.width / 2, 100, `Cascade ×${count}!`, {
-            fontSize: '28px',
-            color: '#7dd3fc',
-            fontStyle: 'bold'
-        }).setOrigin(0.5, 0.5).setDepth(10);
-
-        this.tweens.add({
-            targets: text,
-            alpha: 0,
-            duration: 1000,
-            delay: 500,
-            onComplete: () => text.destroy()
+    showCascadeMessage(label) {
+        if (this._cascadeTimer) this._cascadeTimer.remove();
+        const messageEl = document.getElementById('message');
+        messageEl.textContent = label;
+        this._cascadeTimer = this.time.delayedCall(ANIMATION_TIMINGS.CASCADE_MESSAGE, () => {
+            messageEl.textContent = '';
+            this._cascadeTimer = null;
         });
     }
 }
 
-// ========== Phaser Game Config ==========
+// ========== Phaser Config ==========
+(function () {
+    // Read actual rendered cell size the same way the original does:
+    // inject a temporary element, measure it, then remove it.
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;visibility:hidden;width:var(--cell);height:var(--cell)';
+    document.body.appendChild(probe);
+    const cell = probe.offsetWidth || 40;
+    const gap = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gap')) || 4;
+    document.body.removeChild(probe);
+
+    Gravity2048Scene.cellSize = cell;
+    Gravity2048Scene.gap = gap;
+    Gravity2048Scene.boardWidth  = cell * BOARD_WIDTH  + (BOARD_WIDTH  - 1) * gap;
+    Gravity2048Scene.boardHeight = cell * BOARD_HEIGHT + (BOARD_HEIGHT - 1) * gap;
+})();
+
 const config = {
     type: Phaser.AUTO,
     parent: 'game',
-    width: 340,
-    height: 740,
+    width: Gravity2048Scene.boardWidth,
+    height: Gravity2048Scene.boardHeight,
     scene: Gravity2048Scene,
     render: {
-        pixelArt: true,
-        antialias: false
+        pixelArt: false,
+        antialias: true
     }
 };
 
 const game = new Phaser.Game(config);
+
+function restartGame() {
+    document.getElementById('gameover').classList.remove('show');
+    document.getElementById('message').textContent = '';
+    const scene = game.scene.scenes[0];
+    scene.handleGridReplaced();  // clear any existing sprites and diff cache
+    scene.logic.newGame();
+}
+
+document.getElementById('restart').addEventListener('click', restartGame);
+document.getElementById('restartOverlay').addEventListener('click', restartGame);
+document.getElementById('resumeBtn').addEventListener('click', () => game.scene.scenes[0].togglePause());
+
+// ========== Responsive Resize Handling ==========
+let resizeTimer = null;
+
+function measureCellAndGap() {
+    const probe = document.createElement('div');
+    probe.style.cssText =
+        'position:absolute;visibility:hidden;width:var(--cell);height:var(--cell);';
+    document.body.appendChild(probe);
+    const cell = probe.offsetWidth || 40;
+    const gap = parseInt(
+        getComputedStyle(document.documentElement).getPropertyValue('--gap'), 10
+    ) || 4;
+    document.body.removeChild(probe);
+    return { cell, gap };
+}
+
+function handleResize() {
+    const { cell, gap } = measureCellAndGap();
+
+    const newBoardW = cell * BOARD_WIDTH  + (BOARD_WIDTH  - 1) * gap;
+    const newBoardH = cell * BOARD_HEIGHT + (BOARD_HEIGHT - 1) * gap;
+
+    // Bail out if nothing actually changed
+    const scene = game.scene.scenes[0];
+    if (!scene) return;
+    if (cell === scene.cellSize && gap === scene.gap) return;
+
+    // Update static + instance properties
+    Gravity2048Scene.cellSize   = cell;
+    Gravity2048Scene.gap        = gap;
+    Gravity2048Scene.boardWidth  = newBoardW;
+    Gravity2048Scene.boardHeight = newBoardH;
+    scene.cellSize = cell;
+    scene.gap      = gap;
+
+    // Resize the Phaser canvas
+    game.scale.resize(newBoardW, newBoardH);
+
+    // Invalidate the cached grid background so it regenerates at the new size
+    scene.createBackgroundGrid();
+    scene.buildTileTextures();
+
+    // Reset diff state so next render redraws everything
+    scene.tweens.killAll();
+    Object.values(scene.sprites).forEach(s => {
+        if (!s.destroyed) {
+            s.setVisible(false);
+            s.destroy();
+        }
+    });
+    scene.sprites = {};
+    scene.prevGrid = null;
+    scene.prevFalling = [];
+
+    // Full re-render (repositions every tile at the new cell size)
+    scene.render();
+}
+
+const ro = new ResizeObserver(() => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(handleResize, 150);
+});
+ro.observe(document.body);
 </script>
 </body>
 </html>
