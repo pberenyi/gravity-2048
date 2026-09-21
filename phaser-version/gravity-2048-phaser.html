@@ -564,6 +564,7 @@
                 this.spawn();
                 this.emit('render');
                 this.emit('startFall');
+                this.emit('startMusic');
             }
 
             spawn() {
@@ -1039,7 +1040,7 @@
             // -- Stop music
             // -- SFX: game over (descending 3 notes) --
             playGameOver() {
-                if (this.musicEnabled) this._stopMusic();
+                if (this.musicEnabled) this.stopMusic();
                 if (this.sfxEnabled) {
                     this._init();
                     const notes = [440, 330, 262]; // A4 E4 C4
@@ -1067,23 +1068,23 @@
             // --------------------------------------------
             toggleMusic() {
                 this.musicEnabled = !this.musicEnabled;
-                if (this.musicEnabled) this._startMusic();
-                else this._stopMusic();
+                if (this.musicEnabled) this.startMusic();
+                else this.stopMusic();
                 return this.musicEnabled;
             }
 
-            _startMusic() {
+            startMusic() {
                 this._init();
                 this._musicStep = 0;
                 this._musicNextTime = this.ctx.currentTime + 0.1;
-                // Restore gain if it was muted by a previous _stopMusic
+                // Restore gain if it was muted by a previous stopMusic
                 if (this.musicGain) {
                     this.musicGain.gain.setValueAtTime(0.25, this.ctx.currentTime);
                 }
                 this._scheduleMusic();
             }
 
-            _stopMusic() {
+            stopMusic() {
                 if (this._musicTimer) {
                     clearTimeout(this._musicTimer);
                     this._musicTimer = null;
@@ -1171,17 +1172,19 @@
                         // Root + octave below — two half-note hits
                         if (stepInChord === 0 || stepInChord === 4) {
                             const d = this._stepsPerChord / 2 * eighthSec * 1000;
-                            this._note(chord.root, d, 'triangle', 0.30, this.musicGain, when / 1000, true);
-                            this._note(chord.root / 2, d, 'triangle', 0.18, this.musicGain, when / 1000, true);
+                            this._note(chord.root, d, 'triangle', 0.45, this.musicGain, when / 1000, true);
+                            this._note(chord.root / 2, d, 'triangle', 0.28, this.musicGain, when / 1000, true);
                         }
                     } else {
-                        // Broken chord — 3 chord tones spread over 4 steps (0, 1, 3)
-                        const brokenSteps = [0, 1, 3];
-                        const idx = brokenSteps.indexOf(stepInChord);
-                        if (idx !== -1) {
-                            this._note(chord.bassChord[idx],
-                                eighthSec * 1000 * 0.9,
-                                'triangle', 0.28, this.musicGain, when / 1000, true);
+                        // Chord — all 3 chord tones play simultaneously at step 0,
+                        // sustained for the first 4 steps (half the chord).
+                        if (stepInChord === 0 || stepInChord === 4) {
+                            const durMs = 3 * eighthSec * 1000;   // sustain across steps 0-3
+                            for (let i = 0; i < chord.bassChord.length; i++) {
+                                this._note(chord.bassChord[i],
+                                    durMs,
+                                    'triangle', 0.30, this.musicGain, when / 1000, true);
+                            }
                         }
                         // steps 4-7: rest (let the lead breathe)
                     }
@@ -1286,6 +1289,10 @@
                 this.logic.on('cascade', () => this.audio.playCascade());
                 this.logic.on('gameOver', () => this.audio.playGameOver());
                 this.logic.on('spawn', () => this.audio.playSpawn());
+                this.logic.on('startMusic', () => {
+                    if (this.audio.musicEnabled) this.audio.startMusic();
+                });
+                this.logic.on('stopMusic', () => this.audio.stopMusic());
                 // Let the audio read board fill for dynamic tempo
                 this.audio._setTempoProvider(() => {
                     let filled = 0;
