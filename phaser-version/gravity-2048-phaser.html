@@ -874,20 +874,27 @@
                 this._musicStep = 0;
                 this._musicNextTime = 0;
                 this._musicOscillators = [];  // track active music oscillators
+                this._tempoProvider = null;  // set by scene: () => board fill ratio (0..1)
 
-                const E = 1;
-                this._bassLine = [
-                    [110, 2], [110, E], [110, E], [110, 2], [87, 2], [87, E], [87, E], [87, 2],
-                    [131, 2], [131, E], [131, E], [131, 2], [98, 2], [98, E], [98, E], [98, 2],
+                // Chord progression: Em → C/C → G/B → D → Em → C/C → G → D/F#
+                // Each entry: root freq (bass), lead notes top→bottom
+                this._chords = [
+                    { root: 82.41, lead: [493.88, 392.00, 329.63], bassChord: [82.41, 98.00, 123.47] },  // Em
+                    { root: 130.81, lead: [523.25, 392.00, 329.63], bassChord: [130.81, 164.81, 196.00] },  // C maj
+                    { root: 98.00, lead: [392.00, 293.66, 246.94], bassChord: [98.00, 123.47, 146.83] },  // G maj
+                    { root: 146.83, lead: [440.00, 370.00, 293.66], bassChord: [146.83, 185.00, 220.00] },  // D maj
+                    { root: 82.41, lead: [493.88, 392.00, 329.63], bassChord: [82.41, 98.00, 123.47] },  // Em
+                    { root: 130.81, lead: [523.25, 392.00, 329.63], bassChord: [130.81, 164.81, 196.00] },  // C maj
+                    { root: 98.00, lead: [587.33, 493.88, 392.00], bassChord: [98.00, 123.47, 146.83] },  // G maj
+                    { root: 146.83, lead: [587.33, 440.00, 370.00], bassChord: [146.83, 185.00, 220.00] },  // D maj
                 ];
-                this._leadLine = [
-                    [440, E], [523, E], [659, E], [880, E], [784, E], [659, E], [523, E], [440, E],
-                    [349, E], [440, E], [523, E], [698, E], [659, E], [523, E], [440, E], [349, E],
-                    [523, E], [659, E], [784, E], [1047, E], [988, E], [784, E], [659, E], [523, E],
-                    [392, E], [494, E], [587, E], [784, E], [698, E], [587, E], [494, E], [392, E],
-                ];
-                this._eighthMs = 60000 / 140 / 2;
-                this._musicStepCount = 32;    // full lead line length
+                this._stepsPerChord = 8;
+                this._musicStepCount = this._chords.length * this._stepsPerChord; // 64
+                this._baseBpm = 100;
+                this._maxBpm = 180;
+                this._octaveShiftThreshold = 0.5;
+                this._leadPatterns = [];   // cached per-chord arpeggio pattern (index per step)
+                this._bassPatterns = [];    // cached per-chord bass pattern (0, 1, or 2)
             }
 
 
@@ -907,10 +914,10 @@
                 this.musicGain.connect(this.masterGain);
             }
 
-            // ── Core: play a single note ──
+            // -- Core: play a single note --
             _note(freq, durMs, wave = 'square', vol = 0.3, dest, when = 0, track = false) {
                 if (!this.ctx) return null;
-                // ── Guard: never schedule in the past ──
+                // -- Guard: never schedule in the past --
                 let t = this.ctx.currentTime + when;
                 if (t < this.ctx.currentTime) t = this.ctx.currentTime;
                 const stopT = t + durMs / 1000 + 0.01;
@@ -931,7 +938,7 @@
             }
 
 
-            // ── Core: short noise burst (for impact / whoosh) ──
+            // -- Core: short noise burst (for impact / whoosh) --
             _noise(durMs, vol = 0.2, dest, when = 0) {
                 if (!this.ctx) return;
                 const t = this.ctx.currentTime + when;
@@ -953,14 +960,14 @@
                 src.start(t);
             }
 
-            // ── SFX: move ──
+            // -- SFX: move --
             playMove() {
                 if (!this.sfxEnabled) return;
                 this._init();
                 this._note(700, 25, 'square', 0.12);
             }
 
-            // ── SFX: rotate ──
+            // -- SFX: rotate --
             playRotate() {
                 if (!this.sfxEnabled) return;
                 this._init();
@@ -968,14 +975,14 @@
                 this._note(1200, 20, 'triangle', 0.1, null, 0.02);
             }
 
-            // ── SFX: soft drop tick ──
+            // -- SFX: soft drop tick --
             playSoftDrop() {
                 if (!this.sfxEnabled) return;
                 this._init();
                 this._note(500, 20, 'triangle', 0.08);
             }
 
-            // ── SFX: hard drop (thud + impact) ──
+            // -- SFX: hard drop (thud + impact) --
             playHardDrop() {
                 if (!this.sfxEnabled) return;
                 this._init();
@@ -983,7 +990,7 @@
                 this._noise(60, 0.25);
             }
 
-            // ── SFX: merge (two ascending notes, pitch scales with value) ──
+            // -- SFX: merge (two ascending notes, pitch scales with value) --
             playMerge(value) {
                 if (!this.sfxEnabled) return;
                 this._init();
@@ -993,7 +1000,7 @@
                 this._note(base * 1.25, 80, 'square', 0.25, null, 0.06);
             }
 
-            // ── SFX: row clear (sweep down) ──
+            // -- SFX: row clear (sweep down) --
             playClear(rowCount) {
                 if (!this.sfxEnabled) return;
                 this._init();
@@ -1012,7 +1019,7 @@
                 this._noise(100, 0.15);
             }
 
-            // ── SFX: cascade / multi-clear (ascending arpeggio) ──
+            // -- SFX: cascade / multi-clear (ascending arpeggio) --
             playCascade() {
                 if (!this.sfxEnabled) return;
                 this._init();
@@ -1022,24 +1029,27 @@
                 });
             }
 
-            // ── SFX: spawn (subtle pop) ──
+            // -- SFX: spawn (subtle pop) --
             playSpawn() {
                 if (!this.sfxEnabled) return;
                 this._init();
                 this._note(400, 15, 'square', 0.06);
             }
 
-            // ── SFX: game over (descending 3 notes) ──
+            // -- Stop music
+            // -- SFX: game over (descending 3 notes) --
             playGameOver() {
-                if (!this.sfxEnabled) return;
-                this._init();
-                const notes = [440, 330, 262]; // A4 E4 C4
-                notes.forEach((f, i) => {
-                    this._note(f, 300, 'triangle', 0.35, null, i * 0.25);
-                });
+                if (this.musicEnabled) this._stopMusic();
+                if (this.sfxEnabled) {
+                    this._init();
+                    const notes = [440, 330, 262]; // A4 E4 C4
+                    notes.forEach((f, i) => {
+                        this._note(f, 300, 'triangle', 0.35, null, i * 0.25);
+                    });
+                }
             }
 
-            // ── SFX: pause / unpause ──
+            // -- SFX: pause / unpause --
             playPause(resuming) {
                 if (!this.sfxEnabled) return;
                 this._init();
@@ -1052,9 +1062,9 @@
                 }
             }
 
-            // ────────────────────────────────────────────
+            // --------------------------------------------
             // Background music (simple chiptune loop)
-            // ────────────────────────────────────────────
+            // --------------------------------------------
             toggleMusic() {
                 this.musicEnabled = !this.musicEnabled;
                 if (this.musicEnabled) this._startMusic();
@@ -1101,12 +1111,33 @@
                 }
             }
 
+            _setTempoProvider(fn) {
+                this._tempoProvider = fn;
+            }
+
+            _getCurrentBpm() {
+                let ratio = 0;
+                if (this._tempoProvider) ratio = this._tempoProvider();
+                return this._baseBpm + (this._maxBpm - this._baseBpm) * ratio;
+            }
+
             _scheduleMusic() {
                 if (!this.musicEnabled || !this.ctx) return;
 
-                while (this._musicStep < this._musicStepCount) {
-                    const idx = this._musicStep;
-                    const bassIdx = idx % this._bassLine.length;
+                const bpm = this._getCurrentBpm();
+                const eighthSec = 60 / bpm / 2;  // seconds per eighth note
+                const fillRatio = this._tempoProvider ? this._tempoProvider() : 0;
+                const octaveUp = fillRatio > this._octaveShiftThreshold ? 2 : 1;
+
+                // Schedule as many steps as fit in the lookahead window (~120 ms)
+                const lookaheadMs = 120;
+                let scheduled = 0;
+
+                while (this._musicStep < this._musicStepCount && scheduled < 8) {
+                    const step = this._musicStep;
+                    const chordIdx = Math.floor(step / this._stepsPerChord);
+                    const stepInChord = step % this._stepsPerChord;
+                    const chord = this._chords[chordIdx];
 
                     let when = (this._musicNextTime - this.ctx.currentTime) * 1000;
                     if (when < 0) {
@@ -1114,27 +1145,95 @@
                         when = 50;
                     }
 
-                    const [bf, bd] = this._bassLine[bassIdx];
-                    this._note(bf, bd * this._eighthMs * 0.9, 'triangle', 0.2, this.musicGain, when / 1000, true);
+                    // -- Bass: pick a random pattern once per chord --
+                    if (stepInChord === 0 && this._bassPatterns[chordIdx] === undefined) {
+                        const weights = [4, 3, 2];   // root-only, root+octave, broken chord
+                        const total = weights.reduce((a, b) => a + b, 0);
+                        let r = Math.random() * total;
+                        let chosen = 0;
+                        for (let i = 0; i < weights.length; i++) {
+                            r -= weights[i];
+                            if (r <= 0) { chosen = i; break; }
+                        }
+                        this._bassPatterns[chordIdx] = chosen;
+                    }
 
-                    const [lf, ld] = this._leadLine[idx % this._leadLine.length];
-                    this._note(lf, ld * this._eighthMs * 0.85, 'square', 0.12, this.musicGain, when / 1000, true);
+                    const bassPat = this._bassPatterns[chordIdx];
+
+                    if (bassPat === 0) {
+                        // Root only — two half-note hits
+                        if (stepInChord === 0 || stepInChord === 4) {
+                            this._note(chord.root,
+                                this._stepsPerChord / 2 * eighthSec * 1000,
+                                'triangle', 0.30, this.musicGain, when / 1000, true);
+                        }
+                    } else if (bassPat === 1) {
+                        // Root + octave below — two half-note hits
+                        if (stepInChord === 0 || stepInChord === 4) {
+                            const d = this._stepsPerChord / 2 * eighthSec * 1000;
+                            this._note(chord.root, d, 'triangle', 0.30, this.musicGain, when / 1000, true);
+                            this._note(chord.root / 2, d, 'triangle', 0.18, this.musicGain, when / 1000, true);
+                        }
+                    } else {
+                        // Broken chord — 3 chord tones spread over 4 steps (0, 1, 3)
+                        const brokenSteps = [0, 1, 3];
+                        const idx = brokenSteps.indexOf(stepInChord);
+                        if (idx !== -1) {
+                            this._note(chord.bassChord[idx],
+                                eighthSec * 1000 * 0.9,
+                                'triangle', 0.28, this.musicGain, when / 1000, true);
+                        }
+                        // steps 4-7: rest (let the lead breathe)
+                    }
+
+                    // -- Lead: broken chord pattern (top→mid→bot, repeated) --
+                    // Pick (or reuse) a random arpeggio pattern for this chord
+                    if (stepInChord === 0 && !this._leadPatterns[chordIdx]) {
+                        const patterns = [
+                            [0, 1, 2, 0, 1, 2, 0, 1],  // top → bottom
+                            [2, 1, 0, 2, 1, 0, 2, 1],  // bottom → top
+                            [1, 0, 2, 1, 2, 0, 1, 0],  // middle-out
+                            [0, 2, 1, 0, 2, 1, 0, 2],  // top, bottom, mid (shuffle)
+                        ];
+                        const weights = [4, 4, 1, 1];  // top-down & bottom-up dominate
+                        const total = weights.reduce((a, b) => a + b, 0);
+                        let r = Math.random() * total;
+                        let chosen = 0;
+                        for (let i = 0; i < patterns.length; i++) {
+                            r -= weights[i];
+                            if (r <= 0) { chosen = i; break; }
+                        }
+                        this._leadPatterns[chordIdx] = patterns[chosen];
+                    }
+
+                    const leadIdx = this._leadPatterns[chordIdx][stepInChord];
+                    const leadFreq = chord.lead[leadIdx] * octaveUp;
+                    this._note(
+                        leadFreq,
+                        eighthSec * 1000 * 0.85,
+                        'square', 0.13,
+                        this.musicGain, when / 1000, true
+                    );
 
                     this._musicStep++;
-                    this._musicNextTime += (this._bassLine[bassIdx][1] * this._eighthMs) / 1000;
+                    this._musicNextTime += eighthSec;
+                    scheduled++;
                 }
 
+                // Loop back to the beginning
                 if (this._musicStep >= this._musicStepCount) {
                     this._musicStep = 0;
+                    this._leadPatterns = [];          // ← fresh random picks next cycle
                 }
 
-                // ── FIX: wait until just before the last scheduled note, not a fixed 200 ms ──
+                // Reschedule just before we run out of scheduled notes
                 const msUntilNext = (this._musicNextTime - this.ctx.currentTime) * 1000;
                 this._musicTimer = setTimeout(
                     () => this._scheduleMusic(),
-                    Math.max(30, msUntilNext - 50)   // fire 50 ms before the last note ends
+                    Math.max(30, msUntilNext - 50)
                 );
             }
+
         }
 
         // ========== Phaser Scene ==========
@@ -1163,7 +1262,7 @@
                 this.createBackgroundGrid();
                 this.buildTileTextures();
 
-                // ── Inject Phaser-backed sleep into the logic ──
+                // -- Inject Phaser-backed sleep into the logic --
                 this.logic.setSleep((ms) =>
                     new Promise(resolve => this.time.delayedCall(ms, resolve))
                 );
@@ -1181,12 +1280,22 @@
                 this.logic.on('stopFall', () => this.stopFallTimer());
                 this.logic.on('gridReplaced', () => this.handleGridReplaced());
 
-                // ── Audio hooks ──
+                // -- Audio hooks --
                 this.logic.on('merge', (x, y, value) => this.audio.playMerge(value));
                 this.logic.on('clearRows', (rows) => this.audio.playClear(rows.length));
                 this.logic.on('cascade', () => this.audio.playCascade());
                 this.logic.on('gameOver', () => this.audio.playGameOver());
                 this.logic.on('spawn', () => this.audio.playSpawn());
+                // Let the audio read board fill for dynamic tempo
+                this.audio._setTempoProvider(() => {
+                    let filled = 0;
+                    const g = this.logic.grid;
+                    if (!g) return 0;
+                    for (let y = 0; y < BOARD_HEIGHT; y++)
+                        for (let x = 0; x < BOARD_WIDTH; x++)
+                            if (g[y][x] !== null) filled++;
+                    return filled / (BOARD_WIDTH * BOARD_HEIGHT);
+                });
 
                 // Input
                 this.input.keyboard.on('keydown', (e) => this.handleKeyPress(e));
@@ -1196,7 +1305,7 @@
                 this.updateScoreUI(this.logic.score);
                 this.updateBestUI(this.logic.best);
 
-                // ── Audio buttons ──
+                // -- Audio buttons --
                 const sfxBtn = document.getElementById('sfxBtn');
                 const musicBtn = document.getElementById('musicBtn');
                 sfxBtn.addEventListener('click', () => {
@@ -1210,9 +1319,9 @@
                 });
             }
 
-            // ──────────────────────────────────────────────
+            // ----------------------------------------------
             // Phaser-driven fall timer
-            // ──────────────────────────────────────────────
+            // ----------------------------------------------
             startFallTimer() {
                 this.stopFallTimer();
                 const interval = this.logic.getFallInterval();
@@ -1264,7 +1373,7 @@
                         width: this.cellSize, height: this.cellSize, add: false
                     });
 
-                    // ── Background ──
+                    // -- Background --
                     const gfx = this.make.graphics({ x: 0, y: 0, add: false });
                     gfx.fillStyle(color, 1);
                     gfx.fillRoundedRect(pad, pad, inner, inner, radius);
@@ -1274,7 +1383,7 @@
                     rt.draw(gfx, 0, 0);
                     gfx.destroy();
 
-                    // ── Number ──
+                    // -- Number --
                     const textStyle = {
                         fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
                         fontSize: `${fontPx}px`,
@@ -1289,7 +1398,7 @@
                     rt.draw(txt);
                     txt.destroy();
 
-                    // ── Save & clean up ──
+                    // -- Save & clean up --
                     rt.saveTexture(`tile-${val}`);
                     rt.destroy();
                 }
@@ -1334,15 +1443,15 @@
                 if (!this.logic.running) return;
                 if (this.paused) {
                     this.paused = false;
-                    this.audio.resume(); 
+                    this.audio.resume();
                     this.audio.playPause(true);
                     this.logic.emit('startFall');
                     document.getElementById('paused').classList.remove('show');
                 }
                 else {
-                    this.paused = true; 
+                    this.paused = true;
                     this.audio.playPause(false);
-                    this.audio.suspend(); 
+                    this.audio.suspend();
                     this.logic.emit('stopFall');
                     document.getElementById('paused').classList.add('show');
                 }
