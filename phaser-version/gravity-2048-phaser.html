@@ -154,6 +154,46 @@
             color: var(--accent);
         }
 
+        .bomb-counter {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding: 10px 12px;
+            background: #11151e;
+            border-radius: 10px;
+            border: 1px solid #303747;
+        }
+
+        .bomb-counter .bomb-icon {
+            font-size: 24px;
+        }
+
+        .bomb-counter .bomb-info {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+
+        .bomb-counter .bomb-label {
+            font-size: 10px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: .08em;
+        }
+
+        .bomb-counter .bomb-count {
+            font-size: 20px;
+            font-weight: 800;
+            color: #f97316;
+        }
+
+        .bomb-counter .bomb-hint {
+            font-size: 10px;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+
         button {
             width: 100%;
             border: 1px solid #3b4558;
@@ -275,6 +315,15 @@
             .preview-value {
                 font-size: 13px;
             }
+
+            .bomb-counter .bomb-icon {
+                font-size: 20px;
+            }
+
+            .bomb-counter .bomb-count {
+                font-size: 16px;
+            }
+
         }
 
         @media (max-width: 520px) {
@@ -371,6 +420,14 @@
                 <div class="next">
                     <div id="nextBlock" class="next-block"></div>
                 </div>
+                <div class="bomb-counter" id="bombCounter">
+                    <span class="bomb-icon">💣</span>
+                    <div class="bomb-info">
+                        <div class="bomb-label">Bombs</div>
+                        <div class="bomb-count" id="bombCount">0</div>
+                        <div class="bomb-hint" id="bombHint">Next: row 11</div>
+                    </div>
+                </div>
                 <div class="audio-row">
                     <button id="sfxBtn" class="active">🔊 SFX</button>
                     <button id="musicBtn">🎵 Music</button>
@@ -382,11 +439,17 @@
                     <kbd>↓</kbd> soft drop<br>
                     <kbd>↑</kbd> / <kbd>X</kbd> rotate clockwise<br>
                     <kbd>Z</kbd> rotate counter-clockwise<br>
-                    <kbd>Space</kbd> hard drop<br><br>
+                    <kbd>Space</kbd> hard drop / place bomb<br><br>
+                    <kbd>B</kbd> activate bomb<br>
                     <kbd>R</kbd> restart<br>
-                    <kbd>P</kbd> pause<br>
+                    <kbd>P</kbd> pause<br><br>
                     Blocks merge only when the falling block lands on an identical value.
-                    A full row clears. Clearing a row triggers gravity, which can cause further merges and clears.
+                    A full row clears. Clearing a row triggers gravity, which can cause further merges and
+                    clears.<br><br>
+                    <b>Bomb</b>: Earn one when a block reaches <b>row 11</b> from the bottom,
+                    a second at <b>row 16</b>. Press <kbd>B</kbd> to activate.
+                    Move with arrows, press <kbd>Space</kbd> on an empty cell to detonate -
+                    clears its row ± 1. Falls off the bottom = lost.
                 </div>
             </aside>
         </div>
@@ -407,14 +470,18 @@
         const BOARD_WIDTH = 10;
         const BOARD_HEIGHT = 20;
         const FALL_INTERVAL = 600;
-
+        const TOTAL_CELLS = BOARD_WIDTH * BOARD_HEIGHT;
+        const BOMB_ROW_1 = 11;  // 11th row from the bottom  → y = 9
+        const BOMB_ROW_2 = 16;  // 16th row from the bottom  → y = 4
         const ANIMATION_TIMINGS = {
             MERGE: 65,
             MERGE_PAUSE: 90,
             CLEAR: 170,
             CLEAR_PAUSE: 110,
             SPAWN: 130,
-            CASCADE_MESSAGE: 1000
+            CASCADE_MESSAGE: 1000,
+            BOMB_EXPLODE: 300,
+            BOMB_PLACE: 200
         };
 
         const TILE_COLORS = {
@@ -431,6 +498,8 @@
             2048: 0x60a5fa,
             4096: 0x22d3ee
         };
+        const BOMB_COLOR = 0xff3300;
+        const BOMB_TEXT_COLOR = '#ffffff';
 
         const TEXT_COLORS = {
             light: 0x111111,
@@ -485,6 +554,13 @@
                 this.maxBoardValue = 2;
                 this.callbacks = {};
                 this._sleep = null;
+                // Bomb state
+                this.bombsAvailable = 0;
+                this.bombActive = false;
+                this.bombX = 0;
+                this.bombY = 0;
+                this.highestPlacedY = BOARD_HEIGHT;   // no block placed yet
+                this.bombThresholdsHit = new Set();
             }
 
             on(event, callback) {
@@ -558,6 +634,16 @@
                 this.score = 0;
                 this.cascadeClearCount = 0;
                 this.maxBoardValue = 2;
+                // Reset bomb state
+                this.bombsAvailable = 0;
+                this.bombActive = false;
+                this.bombX = 0;
+                this.bombY = 0;
+                this.highestPlacedY = BOARD_HEIGHT;   // no block placed yet
+                this.bombThresholdsHit.clear();
+                this.emit('bombCount', this.bombsAvailable);
+                this.emit('bombHintUpdate', this._nextBombThreshold());
+                // Set up the first piece
                 this.running = true;
                 this.nextType = GameLogic.randomType();
                 this.nextValue = this.randomValue();
@@ -623,6 +709,135 @@
                 this.lockCurrent();
             }
 
+            // ========== Bomb Methods ==========
+            _nextBombThreshold() {
+                if (!this.bombThresholdsHit.has('r11')) return `row ${BOMB_ROW_1}`;
+                if (!this.bombThresholdsHit.has('r16')) return `row ${BOMB_ROW_2}`;
+                return '—';
+            }
+
+            checkBombThresholds() {
+                const rowFromBottom = BOARD_HEIGHT - this.highestPlacedY;
+
+                if (rowFromBottom >= BOMB_ROW_1 && !this.bombThresholdsHit.has('r11')) {
+                    this.bombThresholdsHit.add('r11');
+                    this.bombsAvailable++;
+                    this.emit('bombEarned', `row ${BOMB_ROW_1}`);
+                    this.emit('bombCount', this.bombsAvailable);
+                    this.emit('bombHintUpdate', this._nextBombThreshold());
+                }
+                if (rowFromBottom >= BOMB_ROW_2 && !this.bombThresholdsHit.has('r16')) {
+                    this.bombThresholdsHit.add('r16');
+                    this.bombsAvailable++;
+                    this.emit('bombEarned', `row ${BOMB_ROW_2}`);
+                    this.emit('bombCount', this.bombsAvailable);
+                    this.emit('bombHintUpdate', this._nextBombThreshold());
+                }
+            }
+
+            startBomb() {
+                if (this.bombsAvailable <= 0 || this.bombActive || this.resolving) return false;
+                if (!this.current) return false;
+
+                this.bombActive = true;
+                this.bombX = Math.floor(BOARD_WIDTH / 2);
+                this.bombY = 0;
+                this.bombsAvailable--;
+                this.emit('stopFall');                        // ← freeze the piece
+                this.emit('bombStart', this.bombX, this.bombY);
+                this.emit('bombCount', this.bombsAvailable);
+                return true;
+            }
+
+            moveBomb(dx, dy) {
+                if (!this.bombActive) return false;
+
+                this.bombX += dx;
+                this.bombY += dy;
+
+                if (this.bombX < 0) this.bombX = 0;
+                if (this.bombX >= BOARD_WIDTH) this.bombX = BOARD_WIDTH - 1;
+
+                if (this.bombY >= BOARD_HEIGHT) {
+                    this.bombActive = false;
+                    this.emit('bombLost');
+                    this.emit('startFall');                    // ← resume the piece
+                    return false;
+                }
+
+                if (this.bombY < 0) this.bombY = 0;
+
+                this.emit('bombMove', this.bombX, this.bombY);
+                return true;
+            }
+
+            async placeBomb() {
+                if (!this.bombActive || this.resolving) return;
+
+                const bx = this.bombX;
+                const by = this.bombY;
+
+                if (this.grid[by][bx] !== null) {
+                    this.emit('bombInvalid', bx, by);
+                    return;
+                }
+
+                this.bombActive = false;
+                this.resolving = true;
+
+                try {
+                    const gen = this.generation;
+                    this.emit('stopFall'); // defensive: make sure the timer is off
+
+                    // Rows to clear: own ± 1, clamped
+                    const rowsToClear = new Set();
+                    for (const ry of [by - 1, by, by + 1]) {
+                        if (ry >= 0 && ry < BOARD_HEIGHT) rowsToClear.add(ry);
+                    }
+                    const rows = [...rowsToClear].sort((a, b) => a - b);
+
+                    // Score
+                    const raw = rows.reduce((sum, r) =>
+                        sum + this.grid[r].reduce((a, v) => a + (v || 0), 0), 0);
+                    this.score += raw;
+
+                    // Animate explosion + clear
+                    this.emit('bombExplode', bx, by, rows);
+                    this.emit('clearRows', rows);
+                    await this.sleep(ANIMATION_TIMINGS.BOMB_EXPLODE);
+                    if (this.generation !== gen || !this.running) return;
+
+                    // Collapse the grid
+                    const fallenCells = this.computeFallenCellsFromGrid(rows);
+                    this.removeRowsWithCollapse(rows);
+                    this.emit('gridReplaced');
+                    this.emit('render');
+                    await this.sleep(ANIMATION_TIMINGS.CLEAR_PAUSE);
+                    if (this.generation !== gen || !this.running) return;
+
+                    // Resolve cascades from the fallen blocks
+                    await this.resolveBoard(fallenCells, gen, false);
+                    if (this.generation !== gen || !this.running) return;
+
+                    this.updateScore();
+                    this.emit('bombPlaced', bx, by, rows.length);
+
+                    // The frozen piece simply resumes its fall
+                    this.emit('startFall');
+
+                } finally {
+                    this.resolving = false;
+                }
+            }
+
+
+            resumeAfterBomb() {
+                if (this.running && this.current && !this.resolving) {
+                    this.emit('startFall');
+                }
+            }
+            // ========== End of Bomb Methods ==========
+
             async lockCurrent() {
                 if (!this.running || !this.current || this.resolving) return;
                 this.resolving = true;
@@ -640,7 +855,10 @@
                         }
                         this.grid[y][x] = p.value;
                         newCells.add(`${x},${y}`);
+                        if (y < this.highestPlacedY) this.highestPlacedY = y;
                     }
+                    // Track blocks placed for bomb thresholds
+                    this.checkBombThresholds();
 
                     this.emit('render');
                     await this.resolveBoard(newCells, gen, true);
@@ -1063,6 +1281,45 @@
                 }
             }
 
+            // -- Bomb SFX --
+            playBombStart() {
+                if (!this.sfxEnabled) return;
+                this._init();
+                this._note(200, 100, 'sawtooth', 0.2);
+                this._note(300, 80, 'square', 0.15, null, 0.1);
+            }
+
+            playBombMove() {
+                if (!this.sfxEnabled) return;
+                this._init();
+                this._note(400, 15, 'triangle', 0.08);
+            }
+
+            playBombExplode() {
+                if (!this.sfxEnabled) return;
+                this._init();
+                this._note(80, 400, 'sawtooth', 0.5);
+                this._noise(300, 0.4);
+                this._note(150, 200, 'square', 0.3, null, 0.1);
+            }
+
+            playBombLost() {
+                if (!this.sfxEnabled) return;
+                this._init();
+                this._note(200, 150, 'triangle', 0.2);
+                this._note(150, 150, 'triangle', 0.15, null, 0.1);
+            }
+
+            playBombEarned() {
+                if (!this.sfxEnabled) return;
+                this._init();
+                const notes = [523, 659, 784, 1047, 1319];
+                notes.forEach((f, i) => {
+                    this._note(f, 80, 'square', 0.25, null, i * 0.06);
+                });
+            }
+
+
             // --------------------------------------------
             // Background music (simple chiptune loop)
             // --------------------------------------------
@@ -1254,6 +1511,7 @@
                 this.boardOffsetX = 0;
                 this.boardOffsetY = 0;
                 this.fallEvent = null;
+                this.bombSprite = null;
             }
 
             create() {
@@ -1264,6 +1522,7 @@
 
                 this.createBackgroundGrid();
                 this.buildTileTextures();
+                this.buildBombTexture();
 
                 // -- Inject Phaser-backed sleep into the logic --
                 this.logic.setSleep((ms) =>
@@ -1282,6 +1541,38 @@
                 this.logic.on('startFall', () => this.startFallTimer());
                 this.logic.on('stopFall', () => this.stopFallTimer());
                 this.logic.on('gridReplaced', () => this.handleGridReplaced());
+                // Bomb callbacks
+                this.logic.on('bombStart', (x, y) => {
+                    this.showBombAt(x, y);
+                    this.updateBombUI();
+                });
+                this.logic.on('bombMove', (x, y) => {
+                    this.moveBombTo(x, y);
+                });
+                this.logic.on('bombLost', () => {
+                    this.hideBomb();
+                    this.showCascadeMessage('💣 Bomb lost!');
+                });
+                this.logic.on('bombInvalid', (x, y) => {
+                    this.showCascadeMessage('❌ Cell occupied!');
+                });
+                this.logic.on('bombExplode', (x, y, rows) => {
+                    this.hideBomb();
+                    this.animateBombExplosion(x, y, rows);
+                });
+                this.logic.on('bombPlaced', (x, y, rowCount) => {
+                    this.showCascadeMessage(`💣 Bomb cleared ${rowCount} row${rowCount > 1 ? 's' : ''}!`);
+                });
+                this.logic.on('bombEarned', (label) => {
+                    this.showCascadeMessage(`💣 Bomb earned! (reached ${label})`);
+                });
+                this.logic.on('bombCount', () => {
+                    this.updateBombUI();
+                });
+                this.logic.on('bombHintUpdate', (hint) => {
+                    const el = document.getElementById('bombHint');
+                    if (el) el.textContent = hint === '—' ? 'All bombs earned' : `Next: ${hint}`;
+                });
 
                 // -- Audio hooks --
                 this.logic.on('merge', (x, y, value) => this.audio.playMerge(value));
@@ -1293,6 +1584,12 @@
                     if (this.audio.musicEnabled) this.audio.startMusic();
                 });
                 this.logic.on('stopMusic', () => this.audio.stopMusic());
+                this.logic.on('bombStart', () => this.audio.playBombStart());
+                this.logic.on('bombMove', () => this.audio.playBombMove());
+                this.logic.on('bombExplode', () => this.audio.playBombExplode());
+                this.logic.on('bombLost', () => this.audio.playBombLost());
+                this.logic.on('bombEarned', () => this.audio.playBombEarned());
+
                 // Let the audio read board fill for dynamic tempo
                 this.audio._setTempoProvider(() => {
                     let filled = 0;
@@ -1311,6 +1608,7 @@
                 this.logic.newGame();
                 this.updateScoreUI(this.logic.score);
                 this.updateBestUI(this.logic.best);
+                this.updateBombUI();
 
                 // -- Audio buttons --
                 const sfxBtn = document.getElementById('sfxBtn');
@@ -1353,6 +1651,7 @@
                     this.stopFallTimer();
                     return;
                 }
+                if (this.logic.bombActive) return; // bomb is active, don't move the piece
                 if (!this.logic.tryMove(0, 1)) {
                     this.logic.lockCurrent();       // lockCurrent will stop/restart the timer
                 } else {
@@ -1411,9 +1710,45 @@
                 }
             }
 
+            buildBombTexture() {
+                const pad = 2;
+                const size = this.cellSize;
+                const inner = size - pad * 2;
+                const radius = 4;
+
+                const rt = this.make.renderTexture({
+                    width: this.cellSize, height: this.cellSize, add: false
+                });
+
+                const gfx = this.make.graphics({ x: 0, y: 0, add: false });
+                gfx.lineStyle(3, 0xffff00, 0.8);
+                gfx.strokeRoundedRect(pad, pad, inner, inner, radius);
+                gfx.fillStyle(BOMB_COLOR, 1);
+                gfx.fillRoundedRect(pad + 2, pad + 2, inner - 4, inner - 4, radius - 1);
+                rt.draw(gfx, 0, 0);
+                gfx.destroy();
+
+                const fontPx = Math.min(24, Math.max(14, Math.round(this.cellSize * 0.55)));
+                const textStyle = {
+                    fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+                    fontSize: `${fontPx}px`,
+                    fontStyle: 'bold',
+                    color: BOMB_TEXT_COLOR,
+                    align: 'center',
+                };
+                const txt = this.make.text({ x: 0, y: 0, text: '💣', style: textStyle });
+                txt.setOrigin(0.5, 0.5);
+                txt.setPosition(this.cellSize / 2, this.cellSize / 2);
+                rt.draw(txt);
+                txt.destroy();
+
+                rt.saveTexture('tile-bomb');
+                rt.destroy();
+            }
+
+
             handleKeyPress(event) {
                 const key = event.key.toLowerCase();
-                // Lazy-init audio on first interaction (browser autoplay policy)
                 if (!this._firstInteraction) { this._firstInteraction = true; this.audio._init(); }
 
                 if (key === 'p') {
@@ -1422,29 +1757,49 @@
                 }
                 if (this.paused) return;
 
-                // Prevent the browser from scrolling / triggering defaults
-                const gameKeys = ['arrowleft', 'arrowright', 'arrowdown', 'arrowup', ' ', 'x', 'z', 'r'];
+                const gameKeys = ['arrowleft', 'arrowright', 'arrowdown', 'arrowup', ' ', 'x', 'z', 'r', 'b'];
                 const arrowKeys = ['arrowleft', 'arrowright', 'arrowdown'];
                 if (gameKeys.includes(key)) {
                     event.preventDefault();
                 }
 
-                // Ignore OS key-repeat (holding a key fires keydown repeatedly)
                 if (!arrowKeys.includes(key) && event.repeat) return;
 
+                // ---- Bomb mode: route keys to the bomb instead of the piece ----
+                if (this.logic.bombActive) {
+                    if (key === 'arrowleft') { this.logic.moveBomb(-1, 0); }
+                    else if (key === 'arrowright') { this.logic.moveBomb(1, 0); }
+                    else if (key === 'arrowdown') { this.logic.moveBomb(0, 1); }
+                    else if (key === 'arrowup' || key === 'x') { this.logic.moveBomb(0, -1); }
+                    else if (key === ' ') { this.logic.placeBomb(); }
+                    return;
+                }
+
+                // ---- Normal piece mode ----
+                if (key === 'b') {
+                    if (this.logic.startBomb()) {
+                        // bomb activated
+                    }
+                    return;
+                }
                 if (key === 'arrowleft') { this.logic.move(-1, 0); this.audio.playMove(); }
                 else if (key === 'arrowright') { this.logic.move(1, 0); this.audio.playMove(); }
-                else if (key === 'arrowdown') { const moved = this.logic.move(0, 1); if (moved) this.audio.playSoftDrop(); }
+                else if (key === 'arrowdown') {
+                    const moved = this.logic.move(0, 1); if (moved)
+                        this.audio.playSoftDrop();
+                }
                 else if (key === 'arrowup' || key === 'x') { if (this.logic.rotate(1)) this.audio.playRotate(); }
                 else if (key === 'z') { if (this.logic.rotate(-1)) this.audio.playRotate(); }
                 else if (key === ' ') { this.logic.hardDrop(); this.audio.playHardDrop(); }
                 else if (key === 'r') {
                     document.getElementById('gameover').classList.remove('show');
                     document.getElementById('message').textContent = '';
+                    this.hideBomb();
                     this.handleGridReplaced();
                     this.logic.newGame();
                 }
             }
+
 
             togglePause() {
                 if (!this.logic.running) return;
@@ -1482,6 +1837,85 @@
                 // Invalidate the diff cache → next render() redraws the entire board.
                 this.prevGrid = null;
                 this.prevFalling = [];
+                this.hideBomb();
+            }
+
+            // ========== Bomb Rendering ==========
+
+            showBombAt(x, y) {
+                this.hideBomb();
+                const posX = this.boardOffsetX + x * (this.cellSize + this.gap) + this.cellSize / 2;
+                const posY = this.boardOffsetY + y * (this.cellSize + this.gap) + this.cellSize / 2;
+                this.bombSprite = this.add.image(posX, posY, 'tile-bomb');
+                this.bombSprite.setDepth(3);
+                this.bombSprite.setAlpha(0.9);
+                // Pulsing animation
+                this.tweens.add({
+                    targets: this.bombSprite,
+                    scale: 1.1,
+                    duration: 400,
+                    yoyo: true,
+                    repeat: -1
+                });
+            }
+
+            moveBombTo(x, y) {
+                if (!this.bombSprite) return;
+                const posX = this.boardOffsetX + x * (this.cellSize + this.gap) + this.cellSize / 2;
+                const posY = this.boardOffsetY + y * (this.cellSize + this.gap) + this.cellSize / 2;
+                this.tweens.killTweensOf(this.bombSprite);
+                this.tweens.add({
+                    targets: this.bombSprite,
+                    x: posX,
+                    y: posY,
+                    duration: 60
+                });
+                // Resume pulse
+                this.time.delayedCall(70, () => {
+                    if (this.bombSprite && !this.bombSprite.destroyed) {
+                        this.tweens.add({
+                            targets: this.bombSprite,
+                            scale: 1.1,
+                            duration: 400,
+                            yoyo: true,
+                            repeat: -1
+                        });
+                    }
+                });
+            }
+
+            hideBomb() {
+                if (this.bombSprite && !this.bombSprite.destroyed) {
+                    this.tweens.killTweensOf(this.bombSprite);
+                    this.bombSprite.destroy();
+                }
+                this.bombSprite = null;
+            }
+
+            animateBombExplosion(x, y, rows) {
+                // Flash the bomb sprite before hiding
+                const posX = this.boardOffsetX + x * (this.cellSize + this.gap) + this.cellSize / 2;
+                const posY = this.boardOffsetY + y * (this.cellSize + this.gap) + this.cellSize / 2;
+                const flash = this.add.image(posX, posY, 'tile-bomb');
+                flash.setDepth(4);
+                flash.setScale(0.5);
+                this.tweens.add({
+                    targets: flash,
+                    scale: 3,
+                    alpha: 0,
+                    duration: ANIMATION_TIMINGS.BOMB_EXPLODE,
+                    ease: 'Quad.easeOut',
+                    onComplete: () => flash.destroy()
+                });
+            }
+
+            updateBombUI() {
+                const countEl = document.getElementById('bombCount');
+                if (countEl) countEl.textContent = this.logic.bombsAvailable;
+                const counterEl = document.getElementById('bombCounter');
+                if (counterEl) {
+                    counterEl.style.opacity = this.logic.bombsAvailable > 0 ? '1' : '0.5';
+                }
             }
 
             // Called once (and on resize). Draws the static background texture.
@@ -1700,6 +2134,7 @@
             document.getElementById('gameover').classList.remove('show');
             document.getElementById('message').textContent = '';
             const scene = game.scene.scenes[0];
+            scene.hideBomb();
             scene.handleGridReplaced();  // clear any existing sprites and diff cache
             scene.logic.newGame();
         }
@@ -1749,7 +2184,8 @@
             // Invalidate the cached grid background so it regenerates at the new size
             scene.createBackgroundGrid();
             scene.buildTileTextures();
-
+            scene.buildBombTexture();
+            scene.hideBomb();
             // Reset diff state so next render redraws everything
             scene.tweens.killAll();
             Object.values(scene.sprites).forEach(s => {
