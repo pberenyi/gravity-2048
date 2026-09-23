@@ -1669,7 +1669,7 @@
                 this.logic.on('scoreUpdated', (score) => this.updateScoreUI(score));
                 this.logic.on('bestUpdated', (best) => this.updateBestUI(best));
                 this.logic.on('gameOver', (score, best) => this.showGameOver(score, best));
-                this.logic.on('cascade', (count) => this.showCascadeMessage(count));
+                this.logic.on('cascade', (count) => this.showMessage(count));
                 this.logic.on('startFall', () => this.startFallTimer());
                 this.logic.on('stopFall', () => this.stopFallTimer());
                 this.logic.on('gridReplaced', () => this.handleGridReplaced());
@@ -1683,20 +1683,20 @@
                 });
                 this.logic.on('bombLost', () => {
                     this.hideBomb();
-                    this.showCascadeMessage('💣 Bomb lost!');
+                    this.showMessage('💣 Bomb lost!');
                 });
                 this.logic.on('bombInvalid', (x, y) => {
-                    this.showCascadeMessage('❌ Cell occupied!');
+                    this.showMessage('❌ Cell occupied!');
                 });
                 this.logic.on('bombExplode', (x, y, rows) => {
                     this.hideBomb();
                     this.animateBombExplosion(x, y, rows);
                 });
                 this.logic.on('bombPlaced', (x, y, rowCount) => {
-                    this.showCascadeMessage(`💣 Bomb cleared ${rowCount} row${rowCount > 1 ? 's' : ''}!`);
+                    this.showMessage(`💣 Bomb cleared ${rowCount} row${rowCount > 1 ? 's' : ''}!`);
                 });
                 this.logic.on('bombEarned', (label) => {
-                    this.showCascadeMessage(`💣 Bomb earned! (reached ${label})`);
+                    this.showMessage(`💣 Bomb earned! (reached ${label})`);
                 });
                 this.logic.on('bombCount', () => {
                     this.updateBombUI();
@@ -2222,7 +2222,7 @@
                 overlay.classList.add('show');
             }
 
-            showCascadeMessage(label) {
+            showMessage(label) {
                 const titleBox = document.getElementById('titleDisplay');
                 const msgText = titleBox.querySelector('.msg-text');
                 msgText.textContent = label;
