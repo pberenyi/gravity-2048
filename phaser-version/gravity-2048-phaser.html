@@ -54,14 +54,11 @@
             letter-spacing: -.03em;
         }
 
-        .subtitle {
-            color: var(--muted);
-            margin-top: 4px;
-        }
-
         .stats {
             display: flex;
-            gap: 10px;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 15px;
         }
 
         .stat {
@@ -69,7 +66,6 @@
             border: 1px solid #303747;
             border-radius: 12px;
             padding: 9px 14px;
-            min-width: 100px;
             text-align: center;
         }
 
@@ -87,11 +83,103 @@
             margin-top: 2px;
         }
 
+        /* ---- Pinball-style title / message display ---- */
+        .title-box {
+            position: relative;
+            background: var(--panel);
+            border: 1px solid #303747;
+            border-radius: 12px;
+            padding: 10px 20px;
+            min-height: 58px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            width: calc(var(--board-w) * var(--cell) + (var(--board-w) - 1) * var(--gap));
+            max-width: 100%;
+        }
+
+        .title-box h1 {
+            font-size: 28px;
+            letter-spacing: -.03em;
+            margin: 0;
+            transition: opacity 0.25s ease;
+        }
+
+        .title-box .subtitle {
+            color: var(--muted);
+            font-size: 13px;
+            margin-top: 2px;
+            transition: opacity 0.25s ease;
+        }
+
+        .title-box .msg-text {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 12px;
+            font-weight: 700;
+            font-size: 15px;
+            color: var(--accent);
+            text-align: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease;
+        }
+
+        .title-box.show-msg .msg-text {
+            opacity: 1;
+        }
+
+        /* ---- Make cascade / event messages more visible ---- */
+        .title-box.show-msg .msg-text {
+            font-size: 22px;
+            color: #ffffff;
+            text-shadow:
+                0 0 12px var(--accent),
+                0 0 24px var(--accent),
+                0 0 48px rgba(125, 211, 252, 0.6);
+            animation: msgPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+            background: rgba(125, 211, 252, 0.10);
+            border-radius: 8px;
+        }
+
+        @keyframes msgPop {
+            0% {
+                transform: scale(0.7);
+                opacity: 0;
+            }
+
+            60% {
+                transform: scale(1.08);
+                opacity: 1;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .title-box.show-msg h1,
+        .title-box.show-msg .subtitle {
+            opacity: 0;
+        }
+
         .layout {
             display: flex;
             justify-content: center;
             gap: 22px;
             align-items: flex-start;
+        }
+
+        header {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 18px;
         }
 
         .board-wrap {
@@ -205,28 +293,43 @@
             font-weight: 650;
         }
 
+        #restart {
+            margin: 16px 0;
+        }
+
         button:hover {
             background: #303849;
         }
 
+        /* ---- Audio toggle buttons ---- */
         .audio-row {
             display: flex;
-            gap: 6px;
-            margin-bottom: 10px;
+            gap: 8px;
+            margin-bottom: 12px;
         }
 
         .audio-row button {
-            width: 50%;
-            padding: 8px 6px;
+            flex: 1;
+            padding: 8px;
             font-size: 13px;
-            font-weight: 700;
-            border-radius: 8px;
+            opacity: 0.45;
+            transition: opacity 0.2s, background 0.2s, border-color 0.2s, color 0.2s;
         }
 
         .audio-row button.active {
-            background: #3a5a3a;
-            border-color: #5a8a5a;
-            color: #aef0ae;
+            opacity: 1;
+            background: #033b15;
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .audio-row button:hover {
+            opacity: 0.8;
+        }
+
+        .audio-row button.active:hover {
+            opacity: 1;
+            background: #35455e;
         }
 
         .help {
@@ -236,12 +339,9 @@
             margin-top: 15px;
         }
 
-        .message {
-            min-height: 24px;
-            text-align: center;
-            color: var(--accent);
-            font-weight: 700;
-            margin-top: 12px;
+        .msg-bar.show {
+            opacity: 1;
+            transform: translateY(0);
         }
 
         .overlay {
@@ -297,6 +397,34 @@
                 font-size: 13px;
             }
 
+            .title-box h1 {
+                font-size: 22px;
+            }
+
+            .title-box .subtitle {
+                font-size: 11px;
+            }
+
+            .title-box .msg-text {
+                font-size: 12px;
+            }
+
+            .title-box.show-msg .msg-text {
+                font-size: 17px;
+            }
+
+            .stats {
+                gap: 6px;
+            }
+
+            .stat {
+                padding: 7px 10px;
+            }
+
+            .stat strong {
+                font-size: 18px;
+            }
+
             .next {
                 height: 80px;
                 gap: 4px;
@@ -345,22 +473,10 @@
                 width: min(100%, 280px);
             }
 
-            .stats {
-                gap: 6px;
-            }
-
-            .stat {
-                padding: 6px 10px;
-                min-width: 80px;
-            }
-
             .stat small {
                 font-size: 10px;
             }
 
-            .stat strong {
-                font-size: 18px;
-            }
         }
 
         @media (max-height: 500px) {
@@ -376,12 +492,28 @@
                 margin-bottom: 8px;
             }
 
-            h1 {
-                font-size: 22px;
+            .title-box h1 {
+                font-size: 20px;
             }
 
-            .subtitle {
-                font-size: 12px;
+            .title-box .subtitle {
+                font-size: 11px;
+            }
+
+            .title-box .msg-text {
+                font-size: 11px;
+            }
+
+            .title-box.show-msg .msg-text {
+                font-size: 15px;
+            }
+
+            .stat {
+                padding: 5px 10px;
+            }
+
+            .stat strong {
+                font-size: 16px;
             }
         }
     </style>
@@ -390,13 +522,10 @@
 <body>
     <div class="app">
         <header>
-            <div>
+            <div class="title-box" id="titleDisplay">
                 <h1>Gravity 2048</h1>
-                <div class="subtitle">Tetris gravity + 2048 merging</div>
-            </div>
-            <div class="stats">
-                <div class="stat"><small>Score</small><strong id="score">0</strong></div>
-                <div class="stat"><small>Best</small><strong id="best">0</strong></div>
+                <div class="subtitle">Tetris gravity 2048 merging</div>
+                <div class="msg-text" id="msgText"></div>
             </div>
         </header>
 
@@ -412,10 +541,13 @@
                         </div>
                     </div>
                 </div>
-                <div class="message" id="message"></div>
             </div>
 
             <aside class="side">
+                <div class="stats">
+                    <div class="stat"><small>Score</small><strong id="score">0</strong></div>
+                    <div class="stat"><small>Best</small><strong id="best">0</strong></div>
+                </div>
                 <h2>Next block</h2>
                 <div class="next">
                     <div id="nextBlock" class="next-block"></div>
@@ -479,7 +611,7 @@
             CLEAR: 170,
             CLEAR_PAUSE: 110,
             SPAWN: 130,
-            CASCADE_MESSAGE: 1000,
+            CASCADE_MESSAGE: 2500,
             BOMB_EXPLODE: 300,
             BOMB_PLACE: 200
         };
@@ -1793,7 +1925,8 @@
                 else if (key === ' ') { this.logic.hardDrop(); this.audio.playHardDrop(); }
                 else if (key === 'r') {
                     document.getElementById('gameover').classList.remove('show');
-                    document.getElementById('message').textContent = '';
+                    const titleBox = document.getElementById('titleDisplay');
+                    titleBox.classList.remove('show-msg');
                     this.hideBomb();
                     this.handleGridReplaced();
                     this.logic.newGame();
@@ -2055,12 +2188,13 @@
 
 
             updateNextPreview(type, value) {
-                const nextEl = document.querySelector('.next');
                 const blockEl = document.getElementById('nextBlock');
-                nextEl.innerHTML = '';
-                nextEl.appendChild(blockEl);
-
+                // Remove any old preview cells + label, keep the container
                 blockEl.innerHTML = '';
+                const nextEl = blockEl.parentElement;
+                const oldLabel = nextEl.querySelector('.preview-value');
+                if (oldLabel) oldLabel.remove();
+
                 for (const [x, y] of SHAPES[type]) {
                     const cell = document.createElement('div');
                     cell.className = 'preview-cell';
@@ -2089,11 +2223,14 @@
             }
 
             showCascadeMessage(label) {
+                const titleBox = document.getElementById('titleDisplay');
+                const msgText = titleBox.querySelector('.msg-text');
+                msgText.textContent = label;
+                titleBox.classList.add('show-msg');
+
                 if (this._cascadeTimer) this._cascadeTimer.remove();
-                const messageEl = document.getElementById('message');
-                messageEl.textContent = label;
                 this._cascadeTimer = this.time.delayedCall(ANIMATION_TIMINGS.CASCADE_MESSAGE, () => {
-                    messageEl.textContent = '';
+                    titleBox.classList.remove('show-msg');
                     this._cascadeTimer = null;
                 });
             }
@@ -2132,7 +2269,8 @@
 
         function restartGame() {
             document.getElementById('gameover').classList.remove('show');
-            document.getElementById('message').textContent = '';
+            const titleBox = document.getElementById('titleDisplay');
+            titleBox.classList.remove('show-msg');
             const scene = game.scene.scenes[0];
             scene.hideBomb();
             scene.handleGridReplaced();  // clear any existing sprites and diff cache
