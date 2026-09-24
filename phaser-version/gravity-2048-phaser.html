@@ -5,8 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Gravity 2048 — Phaser Version</title>
-    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.js"
-        integrity="sha256-SUsGCepd5yz53CJAE0MkfQGpVapI+SZw8SGGgpZBg4E=" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@4.2.1/dist/phaser.js" crossorigin="anonymous"></script>
     <style>
         :root {
             --gap: 4px;
@@ -193,6 +192,10 @@
 
         #game {
             display: block;
+        }
+
+        #game canvas {
+            touch-action: none;
         }
 
         .side {
@@ -567,21 +570,20 @@
                 <button id="restart">New game</button>
                 <div class="help">
                     <b>Controls</b><br>
-                    <kbd>←</kbd> <kbd>→</kbd> move<br>
-                    <kbd>↓</kbd> soft drop<br>
-                    <kbd>↑</kbd> / <kbd>X</kbd> rotate clockwise<br>
-                    <kbd>Z</kbd> rotate counter-clockwise<br>
+                    <kbd>←</kbd> <kbd>→</kbd> move &nbsp;<br>
+                    <kbd>↓</kbd> soft drop<br><br>
+                    <kbd>↑</kbd> / <kbd>X</kbd> rotate CW &nbsp;<br>
+                    <kbd>Z</kbd> rotate CCW<br>
                     <kbd>Space</kbd> hard drop / place bomb<br><br>
-                    <kbd>B</kbd> activate bomb<br>
-                    <kbd>R</kbd> restart<br>
+                    <kbd>B</kbd> activate bomb &nbsp;<br>
+                    <kbd>R</kbd> restart &nbsp;<br>
                     <kbd>P</kbd> pause<br><br>
+                    <b>Touch / Swipe</b><br>
+                    ← swipe left &nbsp; | &nbsp; → swipe right<br>
+                    ↓ swipe down = soft drop &nbsp; | &nbsp; long fast swipe down = hard drop<br>
+                    ↑ swipe up = rotate CW &nbsp; | &nbsp; two-finger tap = rotate CCW<br>
+                    Tap empty cell while bomb active = place bomb<br><br>
                     Blocks merge only when the falling block lands on an identical value.
-                    A full row clears. Clearing a row triggers gravity, which can cause further merges and
-                    clears.<br><br>
-                    <b>Bomb</b>: Earn one when a block reaches <b>row 11</b> from the bottom,
-                    a second at <b>row 16</b>. Press <kbd>B</kbd> to activate.
-                    Move with arrows, press <kbd>Space</kbd> on an empty cell to detonate -
-                    clears its row ± 1. Falls off the bottom = lost.
                 </div>
             </aside>
         </div>
@@ -647,6 +649,11 @@
             J: [[0, 0], [0, 1], [1, 1], [2, 1]],
             L: [[2, 0], [0, 1], [1, 1], [2, 1]]
         };
+
+        // --- Swipe-gesture tuning ---
+        const SWIPE_MIN_DISTANCE = 30;   // px the pointer must travel to count as a swipe
+        const SWIPE_MAX_TIME = 400;  // ms; faster than this = "hard" action
+        const SWIPE_RATIO = 2;   // |dx| > SWIPE_RATIO * |dy|  → horizontal, etc.
 
         // Precompute all rotations for each shape, normalised to the top-left of the bounding box
         const PRECOMPUTED_SHAPES = {};
@@ -1644,6 +1651,11 @@
                 this.boardOffsetY = 0;
                 this.fallEvent = null;
                 this.bombSprite = null;
+                this._swipeStartX = 0;
+                this._swipeStartY = 0;
+                this._swipeStartT = 0;
+                this._swiping = false;
+                this._secondTouch = null;   // for two-finger rotate-CCW
             }
 
             create() {
@@ -1736,6 +1748,93 @@
                 // Input
                 this.input.keyboard.on('keydown', (e) => this.handleKeyPress(e));
 
+                // ---- Touch / swipe input ----
+                // Ensure we have at least 2 pointer slots for multi-touch
+                this.input.addPointer(1);
+
+                this.input.on('pointerdown', (pointer) => {
+                    // First interaction → unlock AudioContext (same as keyboard path)
+                    if (!this._firstInteraction) {
+                        this._firstInteraction = true;
+                        this.audio._init();
+                    }
+
+                    if (pointer.wasTouch || true) {          // treat mouse drags the same way
+                        this._swipeStartX = pointer.x;
+                        this._swipeStartY = pointer.y;
+                        this._swipeStartT = this.game.loop.now;
+                        this._swiping = true;
+
+                        // Track a possible second touch (two-finger → rotate CCW)
+                        if (!this._secondTouch && this.input.pointer1 !== pointer
+                            && this.input.pointer2 && this.input.pointer2.isDown) {
+                            this._secondTouch = pointer;
+                        }
+                    }
+                });
+
+                this.input.on('pointerup', (pointer) => {
+                    if (!this._swiping) return;
+                    this._swiping = false;
+
+                    const dx = pointer.x - this._swipeStartX;
+                    const dy = pointer.y - this._swipeStartY;
+                    const dt = this.game.loop.now - this._swipeStartT;
+                    const dist = Math.hypot(dx, dy);
+
+                    // Two-finger tap → rotate counter-clockwise
+                    if (this._secondTouch) {
+                        this._secondTouch = null;
+                        if (dist < SWIPE_MIN_DISTANCE) {
+                            if (this.logic.bombActive) {
+                                this.logic.moveBomb(0, -1);          // up in bomb mode
+                            } else if (this.logic.rotate(-1)) {
+                                this.audio.playRotate();
+                            }
+                        }
+                        return;
+                    }
+
+                    if (dist < SWIPE_MIN_DISTANCE) return;           // too short – treat as tap
+
+                    // --- Decide direction ---
+                    const horizontal = Math.abs(dx) > Math.abs(dy) * SWIPE_RATIO;
+                    const vertical = !horizontal;
+
+                    if (this.logic.bombActive) {
+                        // ---- Bomb mode gestures ----
+                        if (horizontal && dx < 0) this.logic.moveBomb(-1, 0);
+                        else if (horizontal && dx > 0) this.logic.moveBomb(1, 0);
+                        else if (vertical && dy < 0) this.logic.moveBomb(0, -1);
+                        else if (vertical && dy > 0) this.logic.moveBomb(0, 1);
+                        return;
+                    }
+
+                    // ---- Normal piece mode ----
+                    if (horizontal && dx < 0) {
+                        if (this.logic.move(-1, 0)) this.audio.playMove();
+                    } else if (horizontal && dx > 0) {
+                        if (this.logic.move(1, 0)) this.audio.playMove();
+                    }
+                    else if (vertical && dy < 0) {
+                        // Up-swipe → rotate clockwise (same as ↑ / X)
+                        if (this.logic.rotate(1)) this.audio.playRotate();
+                    }
+                    else if (vertical && dy > 0) {
+                        // Down-swipe:
+                        //   quick & long  → hard drop (same as Space)
+                        //   slow / short  → soft drop (one step, same as ↓)
+                        const isHardDrop = dist > SWIPE_MIN_DISTANCE * 2 && dt < SWIPE_MAX_TIME;
+                        if (isHardDrop) {
+                            this.logic.hardDrop();
+                            this.audio.playHardDrop();
+                        } else {
+                            const moved = this.logic.move(0, 1);
+                            if (moved) this.audio.playSoftDrop();
+                        }
+                    }
+                });
+
                 // Start game
                 this.logic.newGame();
                 this.updateScoreUI(this.logic.score);
@@ -1808,7 +1907,7 @@
                     const fontPx = Math.min(22, Math.max(12, Math.round(this.cellSize * 0.45)));
 
                     const rt = this.make.renderTexture({
-                        width: this.cellSize, height: this.cellSize, add: false
+                        width: this.cellSize, height: this.cellSize
                     });
 
                     // -- Background --
@@ -1819,7 +1918,6 @@
                     gfx.lineStyle(3, outlineColor, 1);
                     gfx.strokeRoundedRect(pad, pad, inner, inner, radius);
                     rt.draw(gfx, 0, 0);
-                    gfx.destroy();
 
                     // -- Number --
                     const textStyle = {
@@ -1834,9 +1932,11 @@
                     txt.setOrigin(0.5, 0.5);
                     txt.setPosition(this.cellSize / 2, this.cellSize / 2);
                     rt.draw(txt);
-                    txt.destroy();
 
                     // -- Save & clean up --
+                    rt.render();
+                    txt.destroy();
+                    gfx.destroy();
                     rt.saveTexture(`tile-${val}`);
                     rt.destroy();
                 }
@@ -1849,7 +1949,7 @@
                 const radius = 4;
 
                 const rt = this.make.renderTexture({
-                    width: this.cellSize, height: this.cellSize, add: false
+                    width: this.cellSize, height: this.cellSize
                 });
 
                 const gfx = this.make.graphics({ x: 0, y: 0, add: false });
@@ -1858,7 +1958,7 @@
                 gfx.fillStyle(BOMB_COLOR, 1);
                 gfx.fillRoundedRect(pad + 2, pad + 2, inner - 4, inner - 4, radius - 1);
                 rt.draw(gfx, 0, 0);
-                gfx.destroy();
+
 
                 const fontPx = Math.min(24, Math.max(14, Math.round(this.cellSize * 0.55)));
                 const textStyle = {
@@ -1872,8 +1972,11 @@
                 txt.setOrigin(0.5, 0.5);
                 txt.setPosition(this.cellSize / 2, this.cellSize / 2);
                 rt.draw(txt);
-                txt.destroy();
 
+
+                rt.render();
+                gfx.destroy();
+                txt.destroy();
                 rt.saveTexture('tile-bomb');
                 rt.destroy();
             }
@@ -2261,7 +2364,8 @@
             scene: Gravity2048Scene,
             render: {
                 pixelArt: false,
-                antialias: true
+                antialias: true,
+                roundPixels: true
             }
         };
 
