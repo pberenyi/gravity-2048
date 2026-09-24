@@ -1,10 +1,11 @@
 <!doctype html>
 <html lang="en">
+
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Gravity 2048 — Phaser Version</title>
-    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.js" integrity="sha256-SUsGCepd5yz53CJAE0MkfQGpVapI+SZw8SGGgpZBg4E=" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@4.2.1/dist/phaser.js" crossorigin="anonymous"></script>
     <style>
         :root {
             --gap: 4px;
@@ -52,14 +53,11 @@
             letter-spacing: -.03em;
         }
 
-        .subtitle {
-            color: var(--muted);
-            margin-top: 4px;
-        }
-
         .stats {
             display: flex;
-            gap: 10px;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 15px;
         }
 
         .stat {
@@ -67,7 +65,6 @@
             border: 1px solid #303747;
             border-radius: 12px;
             padding: 9px 14px;
-            min-width: 100px;
             text-align: center;
         }
 
@@ -85,11 +82,103 @@
             margin-top: 2px;
         }
 
+        /* ---- Pinball-style title / message display ---- */
+        .title-box {
+            position: relative;
+            background: var(--panel);
+            border: 1px solid #303747;
+            border-radius: 12px;
+            padding: 10px 20px;
+            min-height: 58px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            width: calc(var(--board-w) * var(--cell) + (var(--board-w) - 1) * var(--gap));
+            max-width: 100%;
+        }
+
+        .title-box h1 {
+            font-size: 28px;
+            letter-spacing: -.03em;
+            margin: 0;
+            transition: opacity 0.25s ease;
+        }
+
+        .title-box .subtitle {
+            color: var(--muted);
+            font-size: 13px;
+            margin-top: 2px;
+            transition: opacity 0.25s ease;
+        }
+
+        .title-box .msg-text {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 12px;
+            font-weight: 700;
+            font-size: 15px;
+            color: var(--accent);
+            text-align: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease;
+        }
+
+        .title-box.show-msg .msg-text {
+            opacity: 1;
+        }
+
+        /* ---- Make cascade / event messages more visible ---- */
+        .title-box.show-msg .msg-text {
+            font-size: 22px;
+            color: #ffffff;
+            text-shadow:
+                0 0 12px var(--accent),
+                0 0 24px var(--accent),
+                0 0 48px rgba(125, 211, 252, 0.6);
+            animation: msgPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+            background: rgba(125, 211, 252, 0.10);
+            border-radius: 8px;
+        }
+
+        @keyframes msgPop {
+            0% {
+                transform: scale(0.7);
+                opacity: 0;
+            }
+
+            60% {
+                transform: scale(1.08);
+                opacity: 1;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .title-box.show-msg h1,
+        .title-box.show-msg .subtitle {
+            opacity: 0;
+        }
+
         .layout {
             display: flex;
             justify-content: center;
             gap: 22px;
             align-items: flex-start;
+        }
+
+        header {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 18px;
         }
 
         .board-wrap {
@@ -102,7 +191,11 @@
         }
 
         #game {
-            display: block;   
+            display: block;
+        }
+
+        #game canvas {
+            touch-action: none;
         }
 
         .side {
@@ -152,6 +245,46 @@
             color: var(--accent);
         }
 
+        .bomb-counter {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding: 10px 12px;
+            background: #11151e;
+            border-radius: 10px;
+            border: 1px solid #303747;
+        }
+
+        .bomb-counter .bomb-icon {
+            font-size: 24px;
+        }
+
+        .bomb-counter .bomb-info {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+
+        .bomb-counter .bomb-label {
+            font-size: 10px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: .08em;
+        }
+
+        .bomb-counter .bomb-count {
+            font-size: 20px;
+            font-weight: 800;
+            color: #f97316;
+        }
+
+        .bomb-counter .bomb-hint {
+            font-size: 10px;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+
         button {
             width: 100%;
             border: 1px solid #3b4558;
@@ -163,8 +296,43 @@
             font-weight: 650;
         }
 
+        #restart {
+            margin: 16px 0;
+        }
+
         button:hover {
             background: #303849;
+        }
+
+        /* ---- Audio toggle buttons ---- */
+        .audio-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .audio-row button {
+            flex: 1;
+            padding: 8px;
+            font-size: 13px;
+            opacity: 0.45;
+            transition: opacity 0.2s, background 0.2s, border-color 0.2s, color 0.2s;
+        }
+
+        .audio-row button.active {
+            opacity: 1;
+            background: #033b15;
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .audio-row button:hover {
+            opacity: 0.8;
+        }
+
+        .audio-row button.active:hover {
+            opacity: 1;
+            background: #35455e;
         }
 
         .help {
@@ -174,12 +342,9 @@
             margin-top: 15px;
         }
 
-        .message {
-            min-height: 24px;
-            text-align: center;
-            color: var(--accent);
-            font-weight: 700;
-            margin-top: 12px;
+        .msg-bar.show {
+            opacity: 1;
+            transform: translateY(0);
         }
 
         .overlay {
@@ -235,6 +400,34 @@
                 font-size: 13px;
             }
 
+            .title-box h1 {
+                font-size: 22px;
+            }
+
+            .title-box .subtitle {
+                font-size: 11px;
+            }
+
+            .title-box .msg-text {
+                font-size: 12px;
+            }
+
+            .title-box.show-msg .msg-text {
+                font-size: 17px;
+            }
+
+            .stats {
+                gap: 6px;
+            }
+
+            .stat {
+                padding: 7px 10px;
+            }
+
+            .stat strong {
+                font-size: 18px;
+            }
+
             .next {
                 height: 80px;
                 gap: 4px;
@@ -253,6 +446,15 @@
             .preview-value {
                 font-size: 13px;
             }
+
+            .bomb-counter .bomb-icon {
+                font-size: 20px;
+            }
+
+            .bomb-counter .bomb-count {
+                font-size: 16px;
+            }
+
         }
 
         @media (max-width: 520px) {
@@ -274,22 +476,10 @@
                 width: min(100%, 280px);
             }
 
-            .stats {
-                gap: 6px;
-            }
-
-            .stat {
-                padding: 6px 10px;
-                min-width: 80px;
-            }
-
             .stat small {
                 font-size: 10px;
             }
 
-            .stat strong {
-                font-size: 18px;
-            }
         }
 
         @media (max-height: 500px) {
@@ -305,1023 +495,1961 @@
                 margin-bottom: 8px;
             }
 
-            h1 {
-                font-size: 22px;
+            .title-box h1 {
+                font-size: 20px;
             }
 
-            .subtitle {
-                font-size: 12px;
+            .title-box .subtitle {
+                font-size: 11px;
+            }
+
+            .title-box .msg-text {
+                font-size: 11px;
+            }
+
+            .title-box.show-msg .msg-text {
+                font-size: 15px;
+            }
+
+            .stat {
+                padding: 5px 10px;
+            }
+
+            .stat strong {
+                font-size: 16px;
             }
         }
     </style>
 </head>
-<body>
-<div class="app">
-    <header>
-        <div>
-            <h1>Gravity 2048</h1>
-            <div class="subtitle">Tetris gravity + 2048 merging</div>
-        </div>
-        <div class="stats">
-            <div class="stat"><small>Score</small><strong id="score">0</strong></div>
-            <div class="stat"><small>Best</small><strong id="best">0</strong></div>
-        </div>
-    </header>
 
-    <div class="layout">
-        <div>
-            <div class="board-wrap">
-                <div id="game"></div>
-                <div class="overlay" id="gameover">
-                    <div>
-                        <h2>Game Over</h2>
-                        <p id="finalText"></p>
-                        <button id="restartOverlay">Play again</button>
+<body>
+    <div class="app">
+        <header>
+            <div class="title-box" id="titleDisplay">
+                <h1>Gravity 2048</h1>
+                <div class="subtitle">Tetris gravity 2048 merging</div>
+                <div class="msg-text" id="msgText"></div>
+            </div>
+        </header>
+
+        <div class="layout">
+            <div>
+                <div class="board-wrap">
+                    <div id="game"></div>
+                    <div class="overlay" id="gameover">
+                        <div>
+                            <h2>Game Over</h2>
+                            <p id="finalText"></p>
+                            <button id="restartOverlay">Play again</button>
+                        </div>
                     </div>
                 </div>
             </div>
-            <div class="message" id="message"></div>
+
+            <aside class="side">
+                <div class="stats">
+                    <div class="stat"><small>Score</small><strong id="score">0</strong></div>
+                    <div class="stat"><small>Best</small><strong id="best">0</strong></div>
+                </div>
+                <h2>Next block</h2>
+                <div class="next">
+                    <div id="nextBlock" class="next-block"></div>
+                </div>
+                <div class="bomb-counter" id="bombCounter">
+                    <span class="bomb-icon">💣</span>
+                    <div class="bomb-info">
+                        <div class="bomb-label">Bombs</div>
+                        <div class="bomb-count" id="bombCount">0</div>
+                        <div class="bomb-hint" id="bombHint">Next: row 11</div>
+                    </div>
+                </div>
+                <div class="audio-row">
+                    <button id="sfxBtn" class="active">🔊 SFX</button>
+                    <button id="musicBtn">🎵 Music</button>
+                </div>
+                <button id="restart">New game</button>
+                <div class="help">
+                    <b>Controls</b><br>
+                    <kbd>←</kbd> <kbd>→</kbd> move &nbsp;<br>
+                    <kbd>↓</kbd> soft drop<br><br>
+                    <kbd>↑</kbd> / <kbd>X</kbd> rotate CW &nbsp;<br>
+                    <kbd>Z</kbd> rotate CCW<br>
+                    <kbd>Space</kbd> hard drop / place bomb<br><br>
+                    <kbd>B</kbd> activate bomb &nbsp;<br>
+                    <kbd>R</kbd> restart &nbsp;<br>
+                    <kbd>P</kbd> pause<br><br>
+                    <b>Touch / Swipe</b><br>
+                    ← swipe left &nbsp; | &nbsp; → swipe right<br>
+                    ↓ swipe down = soft drop &nbsp; | &nbsp; long fast swipe down = hard drop<br>
+                    ↑ swipe up = rotate CW &nbsp; | &nbsp; two-finger tap = rotate CCW<br>
+                    Tap empty cell while bomb active = place bomb<br><br>
+                    Blocks merge only when the falling block lands on an identical value.
+                </div>
+            </aside>
         </div>
-
-        <aside class="side">
-            <h2>Next block</h2>
-            <div class="next">
-                <div id="nextBlock" class="next-block"></div>
-            </div>
-            <button id="restart">New game</button>
-            <div class="help">
-                <b>Controls</b><br>
-                <kbd>←</kbd> <kbd>→</kbd> move<br>
-                <kbd>↓</kbd> soft drop<br>
-                <kbd>↑</kbd> / <kbd>X</kbd> rotate clockwise<br>
-                <kbd>Z</kbd> rotate counter-clockwise<br>
-                <kbd>Space</kbd> hard drop<br><br>
-                <kbd>R</kbd> restart<br>
-                <kbd>P</kbd> pause<br>
-                Blocks merge only when the falling block lands on an identical value.
-                A full row clears. Clearing a row triggers gravity, which can cause further merges and clears.
-            </div>
-        </aside>
     </div>
-</div>
-<div class="overlay" id="paused">
-    <div>
-        <h2>Paused</h2>
-        <p>Press <kbd>P</kbd> to resume</p>
-        <button id="resumeBtn">Resume</button>
+    <div class="overlay" id="paused">
+        <div>
+            <h2>Paused</h2>
+            <p>Press <kbd>P</kbd> to resume</p>
+            <button id="resumeBtn">Resume</button>
+        </div>
     </div>
-</div>
 
-<script>
-// ============================================================
-// Gravity 2048 — Phaser Game Logic & Rendering
-// ============================================================
+    <script>
+        // ============================================================
+        // Gravity 2048 — Phaser Game Logic & Rendering
+        // ============================================================
 
-const BOARD_WIDTH = 10;
-const BOARD_HEIGHT = 20;
-const FALL_INTERVAL = 600;
+        const BOARD_WIDTH = 10;
+        const BOARD_HEIGHT = 20;
+        const FALL_INTERVAL = 600;
+        const TOTAL_CELLS = BOARD_WIDTH * BOARD_HEIGHT;
+        const BOMB_ROW_1 = 11;  // 11th row from the bottom  → y = 9
+        const BOMB_ROW_2 = 16;  // 16th row from the bottom  → y = 4
+        const ANIMATION_TIMINGS = {
+            MERGE: 65,
+            MERGE_PAUSE: 90,
+            CLEAR: 170,
+            CLEAR_PAUSE: 110,
+            SPAWN: 130,
+            CASCADE_MESSAGE: 2500,
+            BOMB_EXPLODE: 300,
+            BOMB_PLACE: 200
+        };
 
-const ANIMATION_TIMINGS = {
-    MERGE: 65,
-    MERGE_PAUSE: 90,
-    CLEAR: 170,
-    CLEAR_PAUSE: 110,
-    SPAWN: 130,
-    CASCADE_MESSAGE: 1000
-};
+        const TILE_COLORS = {
+            2: 0xd9f99d,
+            4: 0xbef264,
+            8: 0xfde68a,
+            16: 0xfbbf24,
+            32: 0xfb923c,
+            64: 0xf97316,
+            128: 0xf43f5e,
+            256: 0xe879f9,
+            512: 0xc084fc,
+            1024: 0x818cf8,
+            2048: 0x60a5fa,
+            4096: 0x22d3ee
+        };
+        const BOMB_COLOR = 0xff3300;
+        const BOMB_TEXT_COLOR = '#ffffff';
 
-const TILE_COLORS = {
-    2: 0xd9f99d,
-    4: 0xbef264,
-    8: 0xfde68a,
-    16: 0xfbbf24,
-    32: 0xfb923c,
-    64: 0xf97316,
-    128: 0xf43f5e,
-    256: 0xe879f9,
-    512: 0xc084fc,
-    1024: 0x818cf8,
-    2048: 0x60a5fa,
-    4096: 0x22d3ee
-};
+        const TEXT_COLORS = {
+            light: 0x111111,
+            dark: 0xffffff
+        };
 
-const TEXT_COLORS = {
-    light: 0x111111,
-    dark: 0xffffff
-};
+        const SHAPES = {
+            I: [[0, 0], [1, 0], [2, 0], [3, 0]],
+            O: [[1, 0], [2, 0], [1, 1], [2, 1]],
+            T: [[1, 0], [0, 1], [1, 1], [2, 1]],
+            S: [[1, 0], [2, 0], [0, 1], [1, 1]],
+            Z: [[0, 0], [1, 0], [1, 1], [2, 1]],
+            J: [[0, 0], [0, 1], [1, 1], [2, 1]],
+            L: [[2, 0], [0, 1], [1, 1], [2, 1]]
+        };
 
-const SHAPES = {
-    I: [[0, 0], [1, 0], [2, 0], [3, 0]],
-    O: [[1, 0], [2, 0], [1, 1], [2, 1]],
-    T: [[1, 0], [0, 1], [1, 1], [2, 1]],
-    S: [[1, 0], [2, 0], [0, 1], [1, 1]],
-    Z: [[0, 0], [1, 0], [1, 1], [2, 1]],
-    J: [[0, 0], [0, 1], [1, 1], [2, 1]],
-    L: [[2, 0], [0, 1], [1, 1], [2, 1]]
-};
+        // --- Swipe-gesture tuning ---
+        const SWIPE_MIN_DISTANCE = 30;   // px the pointer must travel to count as a swipe
+        const SWIPE_MAX_TIME = 400;  // ms; faster than this = "hard" action
+        const SWIPE_RATIO = 2;   // |dx| > SWIPE_RATIO * |dy|  → horizontal, etc.
 
-// Precompute all rotations for each shape, normalised to the top-left of the bounding box
-const PRECOMPUTED_SHAPES = {};
-for (const [type, baseCells] of Object.entries(SHAPES)) {
-    PRECOMPUTED_SHAPES[type] = [];
-    let cells = baseCells;
-    for (let r = 0; r < 4; r++) {
-        // Normalise so the top-left of the bounding box is (0,0)
-        const minX = Math.min(...cells.map(c => c[0]));
-        const minY = Math.min(...cells.map(c => c[1]));
-        PRECOMPUTED_SHAPES[type][r] =
-            cells.map(([x, y]) => [x - minX, y - minY]);
-        // Rotate 90° clockwise for the next state: (x,y) → (3−y, x)
-        if (type !== 'O') {
-            cells = cells.map(([x, y]) => [3 - y, x]);
-        }
-    }
-}
-
-// ========== Game Logic ==========
-class GameLogic {
-    constructor() {
-        this.grid = [];
-        this.current = null;
-        this.nextType = null;
-        this.nextValue = null;
-        this.score = 0;
-        try {
-            this.best = Number(localStorage.getItem('gravity2048-best')) || 0;
-        } catch {
-            this.best = 0;
-        }
-        this.running = false;
-        this.resolving = false;
-        this.generation = 0;
-        this.cascadeClearCount = 0;
-        this.maxBoardValue = 2;
-        this.callbacks = {};
-        this._sleep = null;
-    }
-
-    on(event, callback) {
-        if (!this.callbacks[event]) this.callbacks[event] = [];
-        this.callbacks[event].push(callback);
-    }
-
-    emit(event, ...args) {
-        if (this.callbacks[event]) {
-            this.callbacks[event].forEach(cb => cb(...args));
-        }
-    }
-
-    setSleep(fn) { this._sleep = fn ?? ((ms) => new Promise(r => setTimeout(r, ms))); }
-    sleep(ms)    { return this._sleep(ms); }
-
-    static randomType() {
-        const types = Object.keys(SHAPES);
-        return types[Math.floor(Math.random() * types.length)];
-    }
-
-    randomValue() {
-        const levels = [];
-        for (let v = 2; v <= this.maxBoardValue; v *= 2) levels.push(v);
-        // As maxBoardValue grows, the decay base increases toward 0.92,
-        // flattening the distribution and favouring higher values.
-        const shift = 1 + 0.05 * Math.log2(this.maxBoardValue / 2);
-        const decay = Math.min(0.92, 0.75 * shift);
-        const weights = levels.map((_, i) => Math.pow(decay, i));
-        const total = weights.reduce((a, b) => a + b, 0);
-        let r = Math.random() * total;
-        for (let i = 0; i < levels.length; i++) {
-            r -= weights[i];
-            if (r <= 0) return levels[i];
-        }
-        return levels[levels.length - 1];
-    }
-
-     getFallInterval() {
-        if (!this.current) return FALL_INTERVAL;
-        // steps: 0 for value 2, 1 for 4, 2 for 8, …
-        const steps = Math.log2(this.current.value / 2);
-        const factor = Math.pow(0.85, steps);
-        return Math.max(150, Math.round(FALL_INTERVAL * factor));
-    }
-
-    makePiece(type, value) {
-        const widths = { I: 4, O: 2, T: 3, S: 3, Z: 3, J: 3, L: 3 };
-        const x = Math.floor((BOARD_WIDTH - widths[type]) / 2);
-
-        return { type, value, rotation: 0, x: x, y: 0 };
-    }
-
-    cells(piece, rotation = piece.rotation, px = piece.x, py = piece.y) {
-        const norm = PRECOMPUTED_SHAPES[piece.type][((rotation % 4) + 4) % 4];
-        return norm.map(([x, y]) => [x + px, y + py]);
-    }
-
-    collides(piece, dx = 0, dy = 0, rotation = piece.rotation) {
-        for (const [x, y] of this.cells(piece, rotation, piece.x + dx, piece.y + dy)) {
-            if (x < 0 || x >= BOARD_WIDTH || y < 0 || y >= BOARD_HEIGHT) return true;
-            if (this.grid[y]?.[x] !== null) return true;
-        }
-        return false;
-    }
-
-    newGame() {
-        this.generation++;
-        this.emit('stopFall');
-        this.grid = Array.from({ length: BOARD_HEIGHT }, () => Array(BOARD_WIDTH).fill(null));
-        this.score = 0;
-        this.cascadeClearCount = 0;
-        this.maxBoardValue = 2;
-        this.running = true;
-        this.nextType = GameLogic.randomType();
-        this.nextValue = this.randomValue();
-        this.spawn();
-        this.emit('render');
-        this.emit('startFall');
-    }
-
-    spawn() {
-        this.current = this.makePiece(this.nextType, this.nextValue);
-        this.nextType = GameLogic.randomType();
-        this.nextValue = this.randomValue();
-        if (this.collides(this.current)) {
-            this.endGame();
-            return;
-        }
-        this.emit('spawn', this.nextType, this.nextValue);
-    }
-
-    tryMove(dx, dy) {
-        if (!this.current || this.collides(this.current, dx, dy)) return false;
-        this.current.x += dx;
-        this.current.y += dy;
-        return true;
-    }
-
-    move(dx, dy) {
-        if (!this.running || this.resolving || !this.current) return false;
-        if (this.tryMove(dx, dy)) {
-            this.emit('render');
-            return true;
-        }
-        if (dy === 1) this.lockCurrent();
-        return false;
-    }
-
-    rotate(dir = 1) {
-        if (!this.running || !this.current || this.resolving || this.current.type === 'O') return;
-        const target = (this.current.rotation + dir + 4) % 4;
-        const kicks = [
-            [0, 0], [-1, 0], [1, 0], [-2, 0], [2, 0],
-            [0, -1], [-1, -1], [1, -1]
-        ];
-        for (const [kx, ky] of kicks) {
-            if (!this.collides(this.current, kx, ky, target)) {
-                this.current.rotation = target;
-                this.current.x += kx;
-                this.current.y += ky;
-                this.emit('render');
-                return true;
+        // Precompute all rotations for each shape, normalised to the top-left of the bounding box
+        const PRECOMPUTED_SHAPES = {};
+        for (const [type, baseCells] of Object.entries(SHAPES)) {
+            PRECOMPUTED_SHAPES[type] = [];
+            let cells = baseCells;
+            for (let r = 0; r < 4; r++) {
+                // Normalise so the top-left of the bounding box is (0,0)
+                const minX = Math.min(...cells.map(c => c[0]));
+                const minY = Math.min(...cells.map(c => c[1]));
+                PRECOMPUTED_SHAPES[type][r] =
+                    cells.map(([x, y]) => [x - minX, y - minY]);
+                // Rotate 90° clockwise for the next state: (x,y) → (3−y, x)
+                if (type !== 'O') {
+                    cells = cells.map(([x, y]) => [3 - y, x]);
+                }
             }
         }
-        return false;
-    }
 
-    hardDrop() {
-        if (!this.running || !this.current || this.resolving) return;
-        let distance = 0;
-        while (this.tryMove(0, 1)) distance++;
-        this.score += distance * 2;
-        this.emit('scoreUpdated', this.score);
-        this.lockCurrent();
-    }
+        // ========== Game Logic ==========
+        class GameLogic {
+            constructor() {
+                this.grid = [];
+                this.current = null;
+                this.nextType = null;
+                this.nextValue = null;
+                this.score = 0;
+                try {
+                    this.best = Number(localStorage.getItem('gravity2048-best')) || 0;
+                } catch {
+                    this.best = 0;
+                }
+                this.running = false;
+                this.resolving = false;
+                this.generation = 0;
+                this.cascadeClearCount = 0;
+                this.maxBoardValue = 2;
+                this.callbacks = {};
+                this._sleep = null;
+                // Bomb state
+                this.bombsAvailable = 0;
+                this.bombActive = false;
+                this.bombX = 0;
+                this.bombY = 0;
+                this.highestPlacedY = BOARD_HEIGHT;   // no block placed yet
+                this.bombThresholdsHit = new Set();
+            }
 
-    async lockCurrent() {
-        if (!this.running || !this.current || this.resolving) return;
-        this.resolving = true;
-        this.emit('stopFall');             // kill the repeating tick immediately
-        try {
-            const gen = this.generation;
-            const p = this.current;
-            this.current = null;
+            on(event, callback) {
+                if (!this.callbacks[event]) this.callbacks[event] = [];
+                this.callbacks[event].push(callback);
+            }
 
-            const newCells = new Set();
-            for (const [x, y] of this.cells(p)) {
-                if (y < 0 || y >= BOARD_HEIGHT || x < 0 || x >= BOARD_WIDTH) {
+            emit(event, ...args) {
+                if (this.callbacks[event]) {
+                    this.callbacks[event].forEach(cb => cb(...args));
+                }
+            }
+
+            setSleep(fn) { this._sleep = fn ?? ((ms) => new Promise(r => setTimeout(r, ms))); }
+            sleep(ms) { return this._sleep(ms); }
+
+            static randomType() {
+                const types = Object.keys(SHAPES);
+                return types[Math.floor(Math.random() * types.length)];
+            }
+
+            randomValue() {
+                const levels = [];
+                for (let v = 2; v <= this.maxBoardValue; v *= 2) levels.push(v);
+                // As maxBoardValue grows, the decay base increases toward 0.92,
+                // flattening the distribution and favouring higher values.
+                const shift = 1 + 0.05 * Math.log2(this.maxBoardValue / 2);
+                const decay = Math.min(0.92, 0.75 * shift);
+                const weights = levels.map((_, i) => Math.pow(decay, i));
+                const total = weights.reduce((a, b) => a + b, 0);
+                let r = Math.random() * total;
+                for (let i = 0; i < levels.length; i++) {
+                    r -= weights[i];
+                    if (r <= 0) return levels[i];
+                }
+                return levels[levels.length - 1];
+            }
+
+            getFallInterval() {
+                if (!this.current) return FALL_INTERVAL;
+                // steps: 0 for value 2, 1 for 4, 2 for 8, …
+                const steps = Math.log2(this.current.value / 2);
+                const factor = Math.pow(0.85, steps);
+                return Math.max(150, Math.round(FALL_INTERVAL * factor));
+            }
+
+            makePiece(type, value) {
+                const widths = { I: 4, O: 2, T: 3, S: 3, Z: 3, J: 3, L: 3 };
+                const x = Math.floor((BOARD_WIDTH - widths[type]) / 2);
+
+                return { type, value, rotation: 0, x: x, y: 0 };
+            }
+
+            cells(piece, rotation = piece.rotation, px = piece.x, py = piece.y) {
+                const norm = PRECOMPUTED_SHAPES[piece.type][((rotation % 4) + 4) % 4];
+                return norm.map(([x, y]) => [x + px, y + py]);
+            }
+
+            collides(piece, dx = 0, dy = 0, rotation = piece.rotation) {
+                for (const [x, y] of this.cells(piece, rotation, piece.x + dx, piece.y + dy)) {
+                    if (x < 0 || x >= BOARD_WIDTH || y < 0 || y >= BOARD_HEIGHT) return true;
+                    if (this.grid[y]?.[x] !== null) return true;
+                }
+                return false;
+            }
+
+            newGame() {
+                this.generation++;
+                this.emit('stopFall');
+                this.grid = Array.from({ length: BOARD_HEIGHT }, () => Array(BOARD_WIDTH).fill(null));
+                this.score = 0;
+                this.cascadeClearCount = 0;
+                this.maxBoardValue = 2;
+                // Reset bomb state
+                this.bombsAvailable = 0;
+                this.bombActive = false;
+                this.bombX = 0;
+                this.bombY = 0;
+                this.highestPlacedY = BOARD_HEIGHT;   // no block placed yet
+                this.bombThresholdsHit.clear();
+                this.emit('bombCount', this.bombsAvailable);
+                this.emit('bombHintUpdate', this._nextBombThreshold());
+                // Set up the first piece
+                this.running = true;
+                this.nextType = GameLogic.randomType();
+                this.nextValue = this.randomValue();
+                this.spawn();
+                this.emit('render');
+                this.emit('startFall');
+                this.emit('startMusic');
+            }
+
+            spawn() {
+                this.current = this.makePiece(this.nextType, this.nextValue);
+                this.nextType = GameLogic.randomType();
+                this.nextValue = this.randomValue();
+                if (this.collides(this.current)) {
                     this.endGame();
                     return;
                 }
-                this.grid[y][x] = p.value;
-                newCells.add(`${x},${y}`);
+                this.emit('spawn', this.nextType, this.nextValue);
             }
 
-            this.emit('render');
-            await this.resolveBoard(newCells, gen, true);
-            if (!this.running || this.generation !== gen) return;
-
-            this.spawn();
-            this.emit('render');
-            this.emit('startFall');
-        } finally {
-            this.resolving = false;
-        }
-    }
-
-    async resolveBoard(activeCells, gen, allowGroupDrop = true) {
-        this.cascadeClearCount = 0;
-        let totalRowsCleared = 0;
-        let safety = BOARD_HEIGHT * BOARD_WIDTH;
-
-        while (safety-- > 0) {
-            const hadMerges = await this.resolveVerticalMerges(activeCells, gen, allowGroupDrop);
-            allowGroupDrop = false;
-            if (this.generation !== gen || !this.running) return;
-            if (hadMerges) {
-                this.emit('render');
-                await this.sleep(ANIMATION_TIMINGS.MERGE_PAUSE);
-                if (this.generation !== gen || !this.running) return;
+            tryMove(dx, dy) {
+                if (!this.current || this.collides(this.current, dx, dy)) return false;
+                this.current.x += dx;
+                this.current.y += dy;
+                return true;
             }
 
-            const rows = this.findClearRows();
-            if (!rows.length && !hadMerges) break;
-
-            if (rows.length) {
-                this.cascadeClearCount++;
-                totalRowsCleared += rows.length;
-                const raw = rows.reduce((sum, r) => sum + this.grid[r].reduce((a, v) => a + (v || 0), 0), 0);
-                const multiplier = Math.max(1, this.cascadeClearCount);
-                this.score += raw * multiplier;
-
-                this.emit('clearRows', rows);
-                await this.sleep(ANIMATION_TIMINGS.CLEAR);
-                if (this.generation !== gen || !this.running) return;
-
-                activeCells = this.computeFallenCellsFromGrid(rows);
-                this.removeRowsWithCollapse(rows);
-                //the grid reference changed; scene must drop its diff cache
-                this.emit('gridReplaced');
-                this.emit('render');
-                await this.sleep(ANIMATION_TIMINGS.CLEAR_PAUSE);
-                if (this.generation !== gen || !this.running) return;
-            }
-        }
-
-        if (totalRowsCleared >= 2) {
-            const label = this.cascadeClearCount > 1 
-                ? `Cascade ×${totalRowsCleared}!`
-                : `Multi-clear ×${totalRowsCleared}!`;
-            this.emit('cascade', label);
-        }
-        this.updateScore();
-    }
-
-    async resolveVerticalMerges(activeCells, gen, allowGroupDrop = false) {
-        const toMerge = [];
-        for (let y = BOARD_HEIGHT - 2; y >= 0; y--) {
-            for (let x = 0; x < BOARD_WIDTH; x++) {
-                const upper = this.grid[y][x];
-                const lower = this.grid[y + 1][x];
-                if (upper === null || lower === null || upper !== lower) continue;
-                const upperIsActive = activeCells.has(`${x},${y}`);
-                const lowerIsActive = activeCells.has(`${x},${y + 1}`);
-                if (upperIsActive !== lowerIsActive) {
-                    toMerge.push([x, y]);
-                }
-            }
-        }
-
-        if (!toMerge.length) return false;
-
-        const consumed = new Set();
-        for (const [x, y] of toMerge) {
-            const key = `${x},${y}`;
-            const keyBelow = `${x},${y + 1}`;
-            if (consumed.has(key) || consumed.has(keyBelow)) continue;
-            if (this.grid[y][x] === null || this.grid[y + 1][x] === null) continue;
-
-            this.grid[y + 1][x] = this.grid[y][x] * 2;
-            this.grid[y][x] = null;
-            consumed.add(key);
-            consumed.add(keyBelow);
-            activeCells.delete(key);
-            activeCells.delete(keyBelow);
-            this.score += this.grid[y + 1][x];
-            if (this.grid[y + 1][x] > this.maxBoardValue) this.maxBoardValue = this.grid[y + 1][x];
-        }
-
-        this.emit('render');
-        for (const [x, y] of toMerge) {
-            this.emit('merge', x, y + 1, this.grid[y + 1][x]);
-        }
-
-        await this.sleep(ANIMATION_TIMINGS.MERGE);
-        if (this.generation !== gen || !this.running) return false;
-
-        if (allowGroupDrop && activeCells.size > 0) {
-            let remaining = [...activeCells].map(k => k.split(',').map(Number));
-            while (remaining.length > 0 && remaining.every(
-                ([cx, cy]) => cy + 1 < BOARD_HEIGHT && (this.grid[cy + 1][cx] === null || activeCells.has(`${cx},${cy + 1}`))
-            )) {
-                for (const [cx, cy] of remaining.sort((a, b) => b[1] - a[1])) {
-                    this.grid[cy + 1][cx] = this.grid[cy][cx];
-                    this.grid[cy][cx] = null;
-                    activeCells.delete(`${cx},${cy}`);
-                    activeCells.add(`${cx},${cy + 1}`);
-                }
-                remaining = [...activeCells].map(k => k.split(',').map(Number));
-                this.emit('render');
-                await this.sleep(ANIMATION_TIMINGS.MERGE);
-                if (this.generation !== gen || !this.running) return false;
-            }
-        }
-
-        for (const [cx, cy] of [...activeCells].map(k => k.split(',').map(Number)).sort((a, b) => b[1] - a[1])) {
-            let mergeY = cy;
-            while (mergeY + 1 < BOARD_HEIGHT && this.grid[mergeY][cx] !== null &&
-                   this.grid[mergeY + 1][cx] === this.grid[mergeY][cx] &&
-                   !activeCells.has(`${cx},${mergeY + 1}`)) {
-                this.grid[mergeY + 1][cx] = this.grid[mergeY][cx] * 2;
-                this.grid[mergeY][cx] = null;
-                this.score += this.grid[mergeY + 1][cx];
-                if (this.grid[mergeY + 1][cx] > this.maxBoardValue) this.maxBoardValue = this.grid[mergeY + 1][cx];
-                activeCells.delete(`${cx},${mergeY}`);
-                mergeY++;
-                while (mergeY + 1 < BOARD_HEIGHT && this.grid[mergeY + 1][cx] === null) {
-                    this.grid[mergeY + 1][cx] = this.grid[mergeY][cx];
-                    this.grid[mergeY][cx] = null;
-                    mergeY++;
-                }
-                this.emit('render');
-                this.emit('merge', cx, mergeY, this.grid[mergeY][cx]);
-                await this.sleep(ANIMATION_TIMINGS.MERGE);
-                if (this.generation !== gen || !this.running) return false;
-
-                // Drop any remaining active cells in this column that are now floating
-                let remaining = [...activeCells].map(k => k.split(',').map(Number)).filter(([x]) => x === cx);
-                while (remaining.length > 0 && remaining.every(
-                    ([rcx, rcy]) => rcy + 1 < BOARD_HEIGHT && this.grid[rcy + 1][rcx] === null
-                )) {
-                    for (const [rcx, rcy] of remaining.sort((a, b) => b[1] - a[1])) {
-                        this.grid[rcy + 1][rcx] = this.grid[rcy][rcx];
-                        this.grid[rcy][rcx] = null;
-                        activeCells.delete(`${rcx},${rcy}`);
-                        activeCells.add(`${rcx},${rcy + 1}`);
-                    }
-                    remaining = [...activeCells].map(k => k.split(',').map(Number)).filter(([x]) => x === cx);
+            move(dx, dy) {
+                if (!this.running || this.resolving || !this.current) return false;
+                if (this.tryMove(dx, dy)) {
                     this.emit('render');
-                    await this.sleep(ANIMATION_TIMINGS.MERGE);
-                    if (this.generation !== gen || !this.running) return false;
+                    return true;
+                }
+                if (dy === 1) this.lockCurrent();
+                return false;
+            }
+
+            rotate(dir = 1) {
+                if (!this.running || !this.current || this.resolving || this.current.type === 'O') return;
+                const target = (this.current.rotation + dir + 4) % 4;
+                const kicks = [
+                    [0, 0], [-1, 0], [1, 0], [-2, 0], [2, 0],
+                    [0, -1], [-1, -1], [1, -1]
+                ];
+                for (const [kx, ky] of kicks) {
+                    if (!this.collides(this.current, kx, ky, target)) {
+                        this.current.rotation = target;
+                        this.current.x += kx;
+                        this.current.y += ky;
+                        this.emit('render');
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            hardDrop() {
+                if (!this.running || !this.current || this.resolving) return;
+                let distance = 0;
+                while (this.tryMove(0, 1)) distance++;
+                this.score += distance * 2;
+                this.emit('scoreUpdated', this.score);
+                this.lockCurrent();
+            }
+
+            // ========== Bomb Methods ==========
+            _nextBombThreshold() {
+                if (!this.bombThresholdsHit.has('r11')) return `row ${BOMB_ROW_1}`;
+                if (!this.bombThresholdsHit.has('r16')) return `row ${BOMB_ROW_2}`;
+                return '—';
+            }
+
+            checkBombThresholds() {
+                const rowFromBottom = BOARD_HEIGHT - this.highestPlacedY;
+
+                if (rowFromBottom >= BOMB_ROW_1 && !this.bombThresholdsHit.has('r11')) {
+                    this.bombThresholdsHit.add('r11');
+                    this.bombsAvailable++;
+                    this.emit('bombEarned', `row ${BOMB_ROW_1}`);
+                    this.emit('bombCount', this.bombsAvailable);
+                    this.emit('bombHintUpdate', this._nextBombThreshold());
+                }
+                if (rowFromBottom >= BOMB_ROW_2 && !this.bombThresholdsHit.has('r16')) {
+                    this.bombThresholdsHit.add('r16');
+                    this.bombsAvailable++;
+                    this.emit('bombEarned', `row ${BOMB_ROW_2}`);
+                    this.emit('bombCount', this.bombsAvailable);
+                    this.emit('bombHintUpdate', this._nextBombThreshold());
                 }
             }
-        }
 
-        return true;
-    }
+            startBomb() {
+                if (this.bombsAvailable <= 0 || this.bombActive || this.resolving) return false;
+                if (!this.current) return false;
 
-    computeFallenCellsFromGrid(clearedRows) {
-        const result = new Set();
-        const clearedSet = new Set(clearedRows);
-        for (let y = 0; y < BOARD_HEIGHT; y++) {
-            if (clearedSet.has(y)) continue;
-            const drop = clearedRows.filter(r => r > y).length;
-            if (drop === 0) continue;
-            for (let x = 0; x < BOARD_WIDTH; x++) {
-                if (this.grid[y][x] !== null) {
-                    result.add(`${x},${y + drop}`);
+                this.bombActive = true;
+                this.bombX = Math.floor(BOARD_WIDTH / 2);
+                this.bombY = 0;
+                this.bombsAvailable--;
+                this.emit('stopFall');                        // ← freeze the piece
+                this.emit('bombStart', this.bombX, this.bombY);
+                this.emit('bombCount', this.bombsAvailable);
+                return true;
+            }
+
+            moveBomb(dx, dy) {
+                if (!this.bombActive) return false;
+
+                this.bombX += dx;
+                this.bombY += dy;
+
+                if (this.bombX < 0) this.bombX = 0;
+                if (this.bombX >= BOARD_WIDTH) this.bombX = BOARD_WIDTH - 1;
+
+                if (this.bombY >= BOARD_HEIGHT) {
+                    this.bombActive = false;
+                    this.emit('bombLost');
+                    this.emit('startFall');                    // ← resume the piece
+                    return false;
+                }
+
+                if (this.bombY < 0) this.bombY = 0;
+
+                this.emit('bombMove', this.bombX, this.bombY);
+                return true;
+            }
+
+            async placeBomb() {
+                if (!this.bombActive || this.resolving) return;
+
+                const bx = this.bombX;
+                const by = this.bombY;
+
+                if (this.grid[by][bx] !== null) {
+                    this.emit('bombInvalid', bx, by);
+                    return;
+                }
+
+                this.bombActive = false;
+                this.resolving = true;
+
+                try {
+                    const gen = this.generation;
+                    this.emit('stopFall'); // defensive: make sure the timer is off
+
+                    // Rows to clear: own ± 1, clamped
+                    const rowsToClear = new Set();
+                    for (const ry of [by - 1, by, by + 1]) {
+                        if (ry >= 0 && ry < BOARD_HEIGHT) rowsToClear.add(ry);
+                    }
+                    const rows = [...rowsToClear].sort((a, b) => a - b);
+
+                    // Score
+                    const raw = rows.reduce((sum, r) =>
+                        sum + this.grid[r].reduce((a, v) => a + (v || 0), 0), 0);
+                    this.score += raw;
+
+                    // Animate explosion + clear
+                    this.emit('bombExplode', bx, by, rows);
+                    this.emit('clearRows', rows);
+                    await this.sleep(ANIMATION_TIMINGS.BOMB_EXPLODE);
+                    if (this.generation !== gen || !this.running) return;
+
+                    // Collapse the grid
+                    const fallenCells = this.computeFallenCellsFromGrid(rows);
+                    this.removeRowsWithCollapse(rows);
+                    this.emit('gridReplaced');
+                    this.emit('render');
+                    await this.sleep(ANIMATION_TIMINGS.CLEAR_PAUSE);
+                    if (this.generation !== gen || !this.running) return;
+
+                    // Resolve cascades from the fallen blocks
+                    await this.resolveBoard(fallenCells, gen, false);
+                    if (this.generation !== gen || !this.running) return;
+
+                    this.updateScore();
+                    this.emit('bombPlaced', bx, by, rows.length);
+
+                    // The frozen piece simply resumes its fall
+                    this.emit('startFall');
+
+                } finally {
+                    this.resolving = false;
                 }
             }
-        }
-        return result;
-    }
 
-    findClearRows() {
-        const rows = [];
-        for (let y = 0; y < BOARD_HEIGHT; y++) {
-            if (this.grid[y].every(v => v !== null)) rows.push(y);
-        }
-        return rows;
-    }
 
-    removeRowsWithCollapse(rows) {
-        const clearSet = new Set(rows);
-        const next = Array.from({ length: BOARD_HEIGHT }, () => Array(BOARD_WIDTH).fill(null));
-        let writeY = BOARD_HEIGHT - 1;
-        for (let y = BOARD_HEIGHT - 1; y >= 0; y--) {
-            if (clearSet.has(y)) continue;
-            for (let x = 0; x < BOARD_WIDTH; x++) {
-                next[writeY][x] = this.grid[y][x];
-            }
-            writeY--;
-        }
-        this.grid = next;
-    }
-
-    updateScore() {
-        if (this.score > this.best) {
-            this.best = this.score;
-            try {
-                localStorage.setItem('gravity2048-best', this.best);
-            } catch {
-                // Ignore localStorage errors
-            }
-            this.emit('bestUpdated', this.best);
-        }
-        this.emit('scoreUpdated', this.score);
-    }
-
-    endGame() {
-        this.running = false;
-        this.emit('gameOver', this.score, this.best);
-    }
-}
-
-// ========== Phaser Scene ==========
-class Gravity2048Scene extends Phaser.Scene {
-    constructor() {
-        super({ key: 'Gravity2048' });
-        this.logic = new GameLogic();
-        this.sprites = {};       // keyed by "x,y" (board) or "fx,y" (falling)
-        this.prevGrid = null;    // deep copy of grid after last render
-        this.prevFalling = [];   // falling piece cells from last render
-        this.cellSize = 0;
-        this.gap = 0;
-        this.boardOffsetX = 0;
-        this.boardOffsetY = 0;
-        this.fallEvent = null;     
-    }
-
-    create() {
-        this.cellSize = Gravity2048Scene.cellSize;
-        this.gap = Gravity2048Scene.gap;
-        this.boardOffsetX = 0;
-        this.boardOffsetY = 0;
-
-        this.createBackgroundGrid();
-        this.buildTileTextures();
-        
-        // ── Inject Phaser-backed sleep into the logic ──
-        this.logic.setSleep((ms) =>
-            new Promise(resolve => this.time.delayedCall(ms, resolve))
-        );
-
-        // Register callbacks
-        this.logic.on('render', () => this.render());
-        this.logic.on('spawn', (type, value) => this.updateNextPreview(type, value));
-        this.logic.on('merge', (x, y, value) => this.animateMerge(x, y, value));
-        this.logic.on('clearRows', (rows) => this.animateClearRows(rows));
-        this.logic.on('scoreUpdated', (score) => this.updateScoreUI(score));
-        this.logic.on('bestUpdated', (best) => this.updateBestUI(best));
-        this.logic.on('gameOver', (score, best) => this.showGameOver(score, best));
-        this.logic.on('cascade', (count) => this.showCascadeMessage(count));
-        this.logic.on('startFall', () => this.startFallTimer());
-        this.logic.on('stopFall', () => this.stopFallTimer());
-        this.logic.on('gridReplaced', () => this.handleGridReplaced());
-
-        // Input
-        this.input.keyboard.on('keydown', (e) => this.handleKeyPress(e));
-
-        // Start game
-        this.logic.newGame();
-        this.updateScoreUI(this.logic.score);
-        this.updateBestUI(this.logic.best);
-    }
-
-    // ──────────────────────────────────────────────
-    // Phaser-driven fall timer
-    // ──────────────────────────────────────────────
-    startFallTimer() {
-        this.stopFallTimer();
-        const interval = this.logic.getFallInterval();
-        this.fallEvent = this.time.addEvent({
-            delay: interval,
-            callback: this.fallTick,
-            callbackScope: this,
-            repeat: -1
-        });
-    }
-
-    stopFallTimer() {
-        if (this.fallEvent) {
-            this.fallEvent.remove();
-            this.fallEvent = null;
-        }
-    }
-
-    fallTick() {
-        if (this.paused) return;
-        if (!this.logic.running || !this.logic.current) {
-            this.stopFallTimer();
-            return;
-        }
-        if (!this.logic.tryMove(0, 1)) {
-            this.logic.lockCurrent();       // lockCurrent will stop/restart the timer
-        } else {
-            this.logic.emit('render');
-        }
-    }
-
-    buildTileTextures() {
-        const pad    = 2;
-        const size   = this.cellSize;
-        const inner  = size - pad * 2;
-        const radius = 4;
-
-        const values = Object.keys(TILE_COLORS).map(Number);
-
-        for (const val of values) {
-            const color     = TILE_COLORS[val];
-            const textColor = val >= 64 ? '#ffffff' : '#111111';
-            const str       = String(val);
-
-            // Font sizing — match original: clamp(12, cell * 0.45, 22)
-            const fontPx = Math.min(22, Math.max(12, Math.round(this.cellSize * 0.45)));
-
-            const rt = this.make.renderTexture({
-                width: this.cellSize, height: this.cellSize, add: false
-            });
-
-            // ── Background ──
-            const gfx = this.make.graphics({ x: 0, y: 0, add: false });
-            gfx.fillStyle(color, 1);
-            gfx.fillRoundedRect(pad, pad, inner, inner, radius);
-            const outlineColor = val >= 64 ? 0xffffff : 0xffff26;
-            gfx.lineStyle(3, outlineColor, 1);
-            gfx.strokeRoundedRect(pad, pad, inner, inner, radius);
-            rt.draw(gfx, 0, 0);
-            gfx.destroy();
-
-            // ── Number ──
-            const textStyle = {
-                fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-                fontSize:   `${fontPx}px`,
-                fontStyle:  'bold',
-                color:      textColor,
-                align:      'center',
-            };
-
-            const txt = this.make.text({ x: 0, y: 0, text: str, style: textStyle });
-            txt.setOrigin(0.5, 0.5);
-            txt.setPosition(this.cellSize / 2, this.cellSize / 2);
-            rt.draw(txt);
-            txt.destroy();
-
-            // ── Save & clean up ──
-            rt.saveTexture(`tile-${val}`);
-            rt.destroy();
-        }
-    }
-
-    handleKeyPress(event) {
-        const key = event.key.toLowerCase();
-        if (key === 'p') {
-            this.togglePause();
-            return;
-        }
-        if (this.paused) return;
-        // Prevent the browser from scrolling / triggering defaults
-        const gameKeys = ['arrowleft','arrowright','arrowdown','arrowup',' ', 'x', 'z', 'r'];
-        const arrowKeys = ['arrowleft','arrowright','arrowdown'];
-        if (gameKeys.includes(key)) {
-            event.preventDefault();
-        }
-
-        // Ignore OS key-repeat (holding a key fires keydown repeatedly)
-        if (!arrowKeys.includes(key) && event.repeat) return;
-
-        if (key === 'arrowleft')       this.logic.move(-1, 0);
-        else if (key === 'arrowright') this.logic.move(1, 0);
-        else if (key === 'arrowdown')  this.logic.move(0, 1);
-        else if (key === 'arrowup' || key === 'x') this.logic.rotate(1);
-        else if (key === 'z')          this.logic.rotate(-1);
-        else if (key === ' ')         this.logic.hardDrop();
-        else if (key === 'r') {
-            document.getElementById('gameover').classList.remove('show');
-            document.getElementById('message').textContent = '';
-            this.handleGridReplaced();
-            this.logic.newGame();
-        }
-    }
-
-    togglePause() {
-        if (!this.logic.running) return;
-        if (this.paused) {
-            this.paused = false;
-            this.logic.emit('startFall');
-            document.getElementById('paused').classList.remove('show');
-        } 
-        else {
-            this.paused = true;
-            this.logic.emit('stopFall');
-            document.getElementById('paused').classList.add('show');
-        }
-    }        
-
-    handleGridReplaced() {
-        // Kill any in-flight tweens (clear-shrink, merge-pulse) so we don't
-        // leave orphaned targets.
-        for (const s of Object.values(this.sprites))
-            if (s && !s.destroyed) this.tweens.killTweensOf(s);
-
-        // Destroy every tracked sprite (board + falling).
-        for (const key of Object.keys(this.sprites)) {
-            const s = this.sprites[key];
-            if (s && !s.destroyed) {
-                s.destroy();
-            }
-            delete this.sprites[key];
-        }
-
-        // Invalidate the diff cache → next render() redraws the entire board.
-        this.prevGrid = null;
-        this.prevFalling = [];
-    }
-
-    // Called once (and on resize). Draws the static background texture.
-    createBackgroundGrid() {
-        const gap = this.gap;
-        const boardWidth  = this.cellSize * BOARD_WIDTH  + (BOARD_WIDTH  - 1) * gap;
-        const boardHeight = this.cellSize * BOARD_HEIGHT + (BOARD_HEIGHT - 1) * gap;
-
-        if (this.textures.exists('gridBg')) this.textures.remove('gridBg');
-        const graphics = this.make.graphics({ x: 0, y: 0, add: false });
-        graphics.fillStyle(0x0e1118, 1);
-        graphics.fillRect(0, 0, boardWidth, boardHeight);
-        for (let y = 0; y < BOARD_HEIGHT; y++) {
-            for (let x = 0; x < BOARD_WIDTH; x++) {
-                const px = x * (this.cellSize + gap);
-                const py = y * (this.cellSize + gap);
-                graphics.fillStyle(0x171b24, 1);
-                graphics.fillRoundedRect(px, py, this.cellSize, this.cellSize, 8);
-                graphics.lineStyle(1, 0x242a37, 1);
-                graphics.strokeRoundedRect(px, py, this.cellSize, this.cellSize, 8);
-            }
-        }
-        graphics.generateTexture('gridBg', boardWidth, boardHeight);
-        graphics.destroy();
-
-        if (this.bgImage) this.bgImage.destroy();
-        this.bgImage = this.add.image(0, 0, 'gridBg').setOrigin(0, 0).setDepth(-1);
-    }
-
-    // Destroy and remove a single sprite pair by key.
-    _destroySprite(key) {
-       const s = this.sprites[key];
-       if (!s) return;
-       this.tweens.killTweensOf(s);
-       s.setVisible(false);
-       s.destroy();
-       delete this.sprites[key];
-    }
-
-    render() {
-        const curGrid    = this.logic.grid;
-        const prevGrid   = this.prevGrid;
-        const curFalling = this.logic.current
-            ? this.logic.cells(this.logic.current).map(([x, y]) => `${x},${y}`)
-            : [];
-
-        // --- Board cells: only update what changed ---
-        for (let y = 0; y < BOARD_HEIGHT; y++) {
-            for (let x = 0; x < BOARD_WIDTH; x++) {
-                const cur  = curGrid[y][x];
-                const prev = prevGrid ? prevGrid[y][x] : undefined;
-                if (cur === prev) continue;
-                const key = `${x},${y}`;
-                this._destroySprite(key);
-                if (cur !== null) this.drawTile(x, y, cur);
-            }
-        }
-
-        // --- Falling piece: clear old positions, draw new ones ---
-        for (const key of this.prevFalling) {
-            this._destroySprite(`f${key}`);
-        }
-        for (const key of curFalling) {
-            this.drawTile(...key.split(',').map(Number), this.logic.current.value, true, 'f');
-        }
-
-        // Safety: make sure every non-null cell has a sprite.
-        // Catches any edge case where a sprite was removed externally
-        // (e.g., by an animation) but the diff didn't notice.
-        for (let y = 0; y < BOARD_HEIGHT; y++) {
-            for (let x = 0; x < BOARD_WIDTH; x++) {
-                const key = `${x},${y}`;
-                if (curGrid[y][x] !== null && !this.sprites[key]) {
-                    this.drawTile(x, y, curGrid[y][x]);
+            resumeAfterBomb() {
+                if (this.running && this.current && !this.resolving) {
+                    this.emit('startFall');
                 }
             }
+            // ========== End of Bomb Methods ==========
+
+            async lockCurrent() {
+                if (!this.running || !this.current || this.resolving) return;
+                this.resolving = true;
+                this.emit('stopFall');             // kill the repeating tick immediately
+                try {
+                    const gen = this.generation;
+                    const p = this.current;
+                    this.current = null;
+
+                    const newCells = new Set();
+                    for (const [x, y] of this.cells(p)) {
+                        if (y < 0 || y >= BOARD_HEIGHT || x < 0 || x >= BOARD_WIDTH) {
+                            this.endGame();
+                            return;
+                        }
+                        this.grid[y][x] = p.value;
+                        newCells.add(`${x},${y}`);
+                        if (y < this.highestPlacedY) this.highestPlacedY = y;
+                    }
+                    // Track blocks placed for bomb thresholds
+                    this.checkBombThresholds();
+
+                    this.emit('render');
+                    await this.resolveBoard(newCells, gen, true);
+                    if (!this.running || this.generation !== gen) return;
+
+                    this.spawn();
+                    this.emit('render');
+                    this.emit('startFall');
+                } finally {
+                    this.resolving = false;
+                }
+            }
+
+            async resolveBoard(activeCells, gen, allowGroupDrop = true) {
+                this.cascadeClearCount = 0;
+                let totalRowsCleared = 0;
+                let safety = BOARD_HEIGHT * BOARD_WIDTH;
+
+                while (safety-- > 0) {
+                    const hadMerges = await this.resolveVerticalMerges(activeCells, gen, allowGroupDrop);
+                    allowGroupDrop = false;
+                    if (this.generation !== gen || !this.running) return;
+                    if (hadMerges) {
+                        this.emit('render');
+                        await this.sleep(ANIMATION_TIMINGS.MERGE_PAUSE);
+                        if (this.generation !== gen || !this.running) return;
+                    }
+
+                    const rows = this.findClearRows();
+                    if (!rows.length && !hadMerges) break;
+
+                    if (rows.length) {
+                        this.cascadeClearCount++;
+                        totalRowsCleared += rows.length;
+                        const raw = rows.reduce((sum, r) => sum + this.grid[r].reduce((a, v) => a + (v || 0), 0), 0);
+                        const multiplier = Math.max(1, this.cascadeClearCount);
+                        this.score += raw * multiplier;
+
+                        this.emit('clearRows', rows);
+                        await this.sleep(ANIMATION_TIMINGS.CLEAR);
+                        if (this.generation !== gen || !this.running) return;
+
+                        activeCells = this.computeFallenCellsFromGrid(rows);
+                        this.removeRowsWithCollapse(rows);
+                        //the grid reference changed; scene must drop its diff cache
+                        this.emit('gridReplaced');
+                        this.emit('render');
+                        await this.sleep(ANIMATION_TIMINGS.CLEAR_PAUSE);
+                        if (this.generation !== gen || !this.running) return;
+                    }
+                }
+
+                if (totalRowsCleared >= 2) {
+                    const label = this.cascadeClearCount > 1
+                        ? `Cascade ×${totalRowsCleared}!`
+                        : `Multi-clear ×${totalRowsCleared}!`;
+                    this.emit('cascade', label);
+                }
+                this.updateScore();
+            }
+
+            async resolveVerticalMerges(activeCells, gen, allowGroupDrop = false) {
+                const toMerge = [];
+                for (let y = BOARD_HEIGHT - 2; y >= 0; y--) {
+                    for (let x = 0; x < BOARD_WIDTH; x++) {
+                        const upper = this.grid[y][x];
+                        const lower = this.grid[y + 1][x];
+                        if (upper === null || lower === null || upper !== lower) continue;
+                        const upperIsActive = activeCells.has(`${x},${y}`);
+                        const lowerIsActive = activeCells.has(`${x},${y + 1}`);
+                        if (upperIsActive !== lowerIsActive) {
+                            toMerge.push([x, y]);
+                        }
+                    }
+                }
+
+                if (!toMerge.length) return false;
+
+                const consumed = new Set();
+                for (const [x, y] of toMerge) {
+                    const key = `${x},${y}`;
+                    const keyBelow = `${x},${y + 1}`;
+                    if (consumed.has(key) || consumed.has(keyBelow)) continue;
+                    if (this.grid[y][x] === null || this.grid[y + 1][x] === null) continue;
+
+                    this.grid[y + 1][x] = this.grid[y][x] * 2;
+                    this.grid[y][x] = null;
+                    consumed.add(key);
+                    consumed.add(keyBelow);
+                    activeCells.delete(key);
+                    activeCells.delete(keyBelow);
+                    this.score += this.grid[y + 1][x];
+                    if (this.grid[y + 1][x] > this.maxBoardValue) this.maxBoardValue = this.grid[y + 1][x];
+                }
+
+                this.emit('render');
+                for (const [x, y] of toMerge) {
+                    this.emit('merge', x, y + 1, this.grid[y + 1][x]);
+                }
+
+                await this.sleep(ANIMATION_TIMINGS.MERGE);
+                if (this.generation !== gen || !this.running) return false;
+
+                if (allowGroupDrop && activeCells.size > 0) {
+                    let remaining = [...activeCells].map(k => k.split(',').map(Number));
+                    while (remaining.length > 0 && remaining.every(
+                        ([cx, cy]) => cy + 1 < BOARD_HEIGHT && (this.grid[cy + 1][cx] === null || activeCells.has(`${cx},${cy + 1}`))
+                    )) {
+                        for (const [cx, cy] of remaining.sort((a, b) => b[1] - a[1])) {
+                            this.grid[cy + 1][cx] = this.grid[cy][cx];
+                            this.grid[cy][cx] = null;
+                            activeCells.delete(`${cx},${cy}`);
+                            activeCells.add(`${cx},${cy + 1}`);
+                        }
+                        remaining = [...activeCells].map(k => k.split(',').map(Number));
+                        this.emit('render');
+                        await this.sleep(ANIMATION_TIMINGS.MERGE);
+                        if (this.generation !== gen || !this.running) return false;
+                    }
+                }
+
+                for (const [cx, cy] of [...activeCells].map(k => k.split(',').map(Number)).sort((a, b) => b[1] - a[1])) {
+                    let mergeY = cy;
+                    while (mergeY + 1 < BOARD_HEIGHT && this.grid[mergeY][cx] !== null &&
+                        this.grid[mergeY + 1][cx] === this.grid[mergeY][cx] &&
+                        !activeCells.has(`${cx},${mergeY + 1}`)) {
+                        this.grid[mergeY + 1][cx] = this.grid[mergeY][cx] * 2;
+                        this.grid[mergeY][cx] = null;
+                        this.score += this.grid[mergeY + 1][cx];
+                        if (this.grid[mergeY + 1][cx] > this.maxBoardValue) this.maxBoardValue = this.grid[mergeY + 1][cx];
+                        activeCells.delete(`${cx},${mergeY}`);
+                        mergeY++;
+                        while (mergeY + 1 < BOARD_HEIGHT && this.grid[mergeY + 1][cx] === null) {
+                            this.grid[mergeY + 1][cx] = this.grid[mergeY][cx];
+                            this.grid[mergeY][cx] = null;
+                            mergeY++;
+                        }
+                        this.emit('render');
+                        this.emit('merge', cx, mergeY, this.grid[mergeY][cx]);
+                        await this.sleep(ANIMATION_TIMINGS.MERGE);
+                        if (this.generation !== gen || !this.running) return false;
+
+                        // Drop any remaining active cells in this column that are now floating
+                        let remaining = [...activeCells].map(k => k.split(',').map(Number)).filter(([x]) => x === cx);
+                        while (remaining.length > 0 && remaining.every(
+                            ([rcx, rcy]) => rcy + 1 < BOARD_HEIGHT && this.grid[rcy + 1][rcx] === null
+                        )) {
+                            for (const [rcx, rcy] of remaining.sort((a, b) => b[1] - a[1])) {
+                                this.grid[rcy + 1][rcx] = this.grid[rcy][rcx];
+                                this.grid[rcy][rcx] = null;
+                                activeCells.delete(`${rcx},${rcy}`);
+                                activeCells.add(`${rcx},${rcy + 1}`);
+                            }
+                            remaining = [...activeCells].map(k => k.split(',').map(Number)).filter(([x]) => x === cx);
+                            this.emit('render');
+                            await this.sleep(ANIMATION_TIMINGS.MERGE);
+                            if (this.generation !== gen || !this.running) return false;
+                        }
+                    }
+                }
+
+                return true;
+            }
+
+            computeFallenCellsFromGrid(clearedRows) {
+                const result = new Set();
+                const clearedSet = new Set(clearedRows);
+                for (let y = 0; y < BOARD_HEIGHT; y++) {
+                    if (clearedSet.has(y)) continue;
+                    const drop = clearedRows.filter(r => r > y).length;
+                    if (drop === 0) continue;
+                    for (let x = 0; x < BOARD_WIDTH; x++) {
+                        if (this.grid[y][x] !== null) {
+                            result.add(`${x},${y + drop}`);
+                        }
+                    }
+                }
+                return result;
+            }
+
+            findClearRows() {
+                const rows = [];
+                for (let y = 0; y < BOARD_HEIGHT; y++) {
+                    if (this.grid[y].every(v => v !== null)) rows.push(y);
+                }
+                return rows;
+            }
+
+            removeRowsWithCollapse(rows) {
+                const clearSet = new Set(rows);
+                const next = Array.from({ length: BOARD_HEIGHT }, () => Array(BOARD_WIDTH).fill(null));
+                let writeY = BOARD_HEIGHT - 1;
+                for (let y = BOARD_HEIGHT - 1; y >= 0; y--) {
+                    if (clearSet.has(y)) continue;
+                    for (let x = 0; x < BOARD_WIDTH; x++) {
+                        next[writeY][x] = this.grid[y][x];
+                    }
+                    writeY--;
+                }
+                this.grid = next;
+            }
+
+            updateScore() {
+                if (this.score > this.best) {
+                    this.best = this.score;
+                    try {
+                        localStorage.setItem('gravity2048-best', this.best);
+                    } catch {
+                        // Ignore localStorage errors
+                    }
+                    this.emit('bestUpdated', this.best);
+                }
+                this.emit('scoreUpdated', this.score);
+            }
+
+            endGame() {
+                this.running = false;
+                this.emit('gameOver', this.score, this.best);
+            }
         }
 
-        // Snapshot grid for next diff (shallow row copy is enough — values are primitives)
-        this.prevGrid   = curGrid.map(row => row.slice());
-        this.prevFalling = curFalling;
-    }
+        // ========== Chiptune Audio (Web Audio API) ==========
+        class ChiptuneAudio {
+            constructor() {
+                this.ctx = null;
+                this.sfxGain = null;
+                this.musicGain = null;
+                this.masterGain = null;
+                this.sfxEnabled = true;
+                this.musicEnabled = false;
+                this._musicTimer = null;
+                this._musicStep = 0;
+                this._musicNextTime = 0;
+                this._musicOscillators = [];  // track active music oscillators
+                this._tempoProvider = null;  // set by scene: () => board fill ratio (0..1)
 
-    drawTile(x, y, value, isFalling = false, keyPrefix = '') {
-        const posX = this.boardOffsetX + x * (this.cellSize + this.gap);
-        const posY = this.boardOffsetY + y * (this.cellSize + this.gap);
+                // Chord progression: Em → C/C → G/B → D → Em → C/C → G → D/F#
+                // Each entry: root freq (bass), lead notes top→bottom
+                this._chords = [
+                    { root: 82.41, lead: [493.88, 392.00, 329.63], bassChord: [82.41, 98.00, 123.47] },  // Em
+                    { root: 130.81, lead: [523.25, 392.00, 329.63], bassChord: [130.81, 164.81, 196.00] },  // C maj
+                    { root: 98.00, lead: [392.00, 293.66, 246.94], bassChord: [98.00, 123.47, 146.83] },  // G maj
+                    { root: 146.83, lead: [440.00, 370.00, 293.66], bassChord: [146.83, 185.00, 220.00] },  // D maj
+                    { root: 82.41, lead: [493.88, 392.00, 329.63], bassChord: [82.41, 98.00, 123.47] },  // Em
+                    { root: 130.81, lead: [523.25, 392.00, 329.63], bassChord: [130.81, 164.81, 196.00] },  // C maj
+                    { root: 98.00, lead: [587.33, 493.88, 392.00], bassChord: [98.00, 123.47, 146.83] },  // G maj
+                    { root: 146.83, lead: [587.33, 440.00, 370.00], bassChord: [146.83, 185.00, 220.00] },  // D maj
+                ];
+                this._stepsPerChord = 8;
+                this._musicStepCount = this._chords.length * this._stepsPerChord; // 64
+                this._baseBpm = 100;
+                this._maxBpm = 180;
+                this._octaveShiftThreshold = 0.5;
+                this._leadPatterns = [];   // cached per-chord arpeggio pattern (index per step)
+                this._bassPatterns = [];    // cached per-chord bass pattern (0, 1, or 2)
+            }
 
-        const texName = `tile-${TILE_COLORS[value] ? value : 4096}`;  // fallback for values beyond 4096
 
-        const img = this.add.image(
-            posX + this.cellSize / 2,
-            posY + this.cellSize / 2,
-            texName
-        );
-        img.setDepth(isFalling ? 2 : 1);
-        if (isFalling) img.setAlpha(0.8);
+            _init() {
+                if (this.ctx) return;
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                this.masterGain = this.ctx.createGain();
+                this.masterGain.gain.value = 0.5;
+                this.masterGain.connect(this.ctx.destination);
 
-        this.sprites[`${keyPrefix}${x},${y}`] = img;
-    }
+                this.sfxGain = this.ctx.createGain();
+                this.sfxGain.gain.value = 0.8;
+                this.sfxGain.connect(this.masterGain);
 
-    animateMerge(x, y, value) {
-        const key    = `${x},${y}`;
-       const img = this.sprites[key];
-       if (!img) return;
-       this.tweens.add({
-           targets: img,
-           scale: 1.15,
-           duration: ANIMATION_TIMINGS.MERGE,
-           yoyo: true
-       });
-    }
+                this.musicGain = this.ctx.createGain();
+                this.musicGain.gain.value = 0.25;
+                this.musicGain.connect(this.masterGain);
+            }
 
-    animateClearRows(rows) {
-        rows.forEach(y => {
-            for (let x = 0; x < BOARD_WIDTH; x++) {
-                const key  = `${x},${y}`;
-                const img  = this.sprites[key];
-                if (!img) continue;
+            // -- Core: play a single note --
+            _note(freq, durMs, wave = 'square', vol = 0.3, dest, when = 0, track = false) {
+                if (!this.ctx) return null;
+                // -- Guard: never schedule in the past --
+                let t = this.ctx.currentTime + when;
+                if (t < this.ctx.currentTime) t = this.ctx.currentTime;
+                const stopT = t + durMs / 1000 + 0.01;
 
-                // Do NOT delete from this.sprites here.
-                // The entry stays until the object is actually destroyed.
+                const osc = this.ctx.createOscillator();
+                const g = this.ctx.createGain();
+                osc.type = wave;
+                osc.frequency.setValueAtTime(freq, t);
+                g.gain.setValueAtTime(vol, t);
+                g.gain.exponentialRampToValueAtTime(0.001, stopT);
+                osc.connect(g);
+                g.connect(dest || this.sfxGain);
+                osc.start(t);
+                osc.stop(stopT);
+
+                if (track) this._musicOscillators.push(osc);
+                return osc;
+            }
+
+
+            // -- Core: short noise burst (for impact / whoosh) --
+            _noise(durMs, vol = 0.2, dest, when = 0) {
+                if (!this.ctx) return;
+                const t = this.ctx.currentTime + when;
+                const len = this.ctx.sampleRate * durMs / 1000;
+                const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+                const data = buf.getChannelData(0);
+                for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+                const src = this.ctx.createBufferSource();
+                src.buffer = buf;
+                const g = this.ctx.createGain();
+                g.gain.setValueAtTime(vol, t);
+                g.gain.exponentialRampToValueAtTime(0.001, t + durMs / 1000);
+                const filt = this.ctx.createBiquadFilter();
+                filt.type = 'bandpass';
+                filt.frequency.value = 800;
+                src.connect(filt);
+                filt.connect(g);
+                g.connect(dest || this.sfxGain);
+                src.start(t);
+            }
+
+            // -- SFX: move --
+            playMove() {
+                if (!this.sfxEnabled) return;
+                this._init();
+                this._note(700, 25, 'square', 0.12);
+            }
+
+            // -- SFX: rotate --
+            playRotate() {
+                if (!this.sfxEnabled) return;
+                this._init();
+                this._note(900, 35, 'square', 0.15);
+                this._note(1200, 20, 'triangle', 0.1, null, 0.02);
+            }
+
+            // -- SFX: soft drop tick --
+            playSoftDrop() {
+                if (!this.sfxEnabled) return;
+                this._init();
+                this._note(500, 20, 'triangle', 0.08);
+            }
+
+            // -- SFX: hard drop (thud + impact) --
+            playHardDrop() {
+                if (!this.sfxEnabled) return;
+                this._init();
+                this._note(120, 120, 'square', 0.4);
+                this._noise(60, 0.25);
+            }
+
+            // -- SFX: merge (two ascending notes, pitch scales with value) --
+            playMerge(value) {
+                if (!this.sfxEnabled) return;
+                this._init();
+                const steps = Math.log2(value / 2); // 0,1,2,...
+                const base = 200 + steps * 80;
+                this._note(base, 90, 'square', 0.3);
+                this._note(base * 1.25, 80, 'square', 0.25, null, 0.06);
+            }
+
+            // -- SFX: row clear (sweep down) --
+            playClear(rowCount) {
+                if (!this.sfxEnabled) return;
+                this._init();
+                const vol = Math.min(0.5, 0.25 + rowCount * 0.05);
+                const osc = this.ctx.createOscillator();
+                const g = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(2000, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(300, this.ctx.currentTime + 0.2);
+                g.gain.setValueAtTime(vol, this.ctx.currentTime);
+                g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.25);
+                osc.connect(g);
+                g.connect(this.sfxGain);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.3);
+                this._noise(100, 0.15);
+            }
+
+            // -- SFX: cascade / multi-clear (ascending arpeggio) --
+            playCascade() {
+                if (!this.sfxEnabled) return;
+                this._init();
+                const notes = [523, 659, 784, 1047]; // C5 E5 G5 C6
+                notes.forEach((f, i) => {
+                    this._note(f, 100, 'square', 0.3, null, i * 0.07);
+                });
+            }
+
+            // -- SFX: spawn (subtle pop) --
+            playSpawn() {
+                if (!this.sfxEnabled) return;
+                this._init();
+                this._note(400, 15, 'square', 0.06);
+            }
+
+            // -- Stop music
+            // -- SFX: game over (descending 3 notes) --
+            playGameOver() {
+                if (this.musicEnabled) this.stopMusic();
+                if (this.sfxEnabled) {
+                    this._init();
+                    const notes = [440, 330, 262]; // A4 E4 C4
+                    notes.forEach((f, i) => {
+                        this._note(f, 300, 'triangle', 0.35, null, i * 0.25);
+                    });
+                }
+            }
+
+            // -- SFX: pause / unpause --
+            playPause(resuming) {
+                if (!this.sfxEnabled) return;
+                this._init();
+                if (resuming) {
+                    this._note(440, 80, 'square', 0.2);
+                    this._note(660, 80, 'square', 0.2, null, 0.08);
+                } else {
+                    this._note(660, 80, 'square', 0.2);
+                    this._note(440, 80, 'square', 0.2, null, 0.08);
+                }
+            }
+
+            // -- Bomb SFX --
+            playBombStart() {
+                if (!this.sfxEnabled) return;
+                this._init();
+                this._note(200, 100, 'sawtooth', 0.2);
+                this._note(300, 80, 'square', 0.15, null, 0.1);
+            }
+
+            playBombMove() {
+                if (!this.sfxEnabled) return;
+                this._init();
+                this._note(400, 15, 'triangle', 0.08);
+            }
+
+            playBombExplode() {
+                if (!this.sfxEnabled) return;
+                this._init();
+                this._note(80, 400, 'sawtooth', 0.5);
+                this._noise(300, 0.4);
+                this._note(150, 200, 'square', 0.3, null, 0.1);
+            }
+
+            playBombLost() {
+                if (!this.sfxEnabled) return;
+                this._init();
+                this._note(200, 150, 'triangle', 0.2);
+                this._note(150, 150, 'triangle', 0.15, null, 0.1);
+            }
+
+            playBombEarned() {
+                if (!this.sfxEnabled) return;
+                this._init();
+                const notes = [523, 659, 784, 1047, 1319];
+                notes.forEach((f, i) => {
+                    this._note(f, 80, 'square', 0.25, null, i * 0.06);
+                });
+            }
+
+
+            // --------------------------------------------
+            // Background music (simple chiptune loop)
+            // --------------------------------------------
+            toggleMusic() {
+                this.musicEnabled = !this.musicEnabled;
+                if (this.musicEnabled) this.startMusic();
+                else this.stopMusic();
+                return this.musicEnabled;
+            }
+
+            startMusic() {
+                this._init();
+                this._musicStep = 0;
+                this._musicNextTime = this.ctx.currentTime + 0.1;
+                // Restore gain if it was muted by a previous stopMusic
+                if (this.musicGain) {
+                    this.musicGain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+                }
+                this._scheduleMusic();
+            }
+
+            stopMusic() {
+                if (this._musicTimer) {
+                    clearTimeout(this._musicTimer);
+                    this._musicTimer = null;
+                }
+                // Mute immediately so already-scheduled notes go silent
+                if (this.musicGain && this.ctx) {
+                    this.musicGain.gain.setValueAtTime(0, this.ctx.currentTime);
+                }
+                // Stop any still-running tracked oscillators
+                this._musicOscillators.forEach(osc => {
+                    try { osc.stop(); } catch (e) { /* already stopped */ }
+                });
+                this._musicOscillators = [];
+            }
+
+            suspend() {
+                if (this.ctx && this.ctx.state === 'running') {
+                    this.ctx.suspend();
+                }
+            }
+
+            resume() {
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            _setTempoProvider(fn) {
+                this._tempoProvider = fn;
+            }
+
+            _getCurrentBpm() {
+                let ratio = 0;
+                if (this._tempoProvider) ratio = this._tempoProvider();
+                return this._baseBpm + (this._maxBpm - this._baseBpm) * ratio;
+            }
+
+            _scheduleMusic() {
+                if (!this.musicEnabled || !this.ctx) return;
+
+                const bpm = this._getCurrentBpm();
+                const eighthSec = 60 / bpm / 2;  // seconds per eighth note
+                const fillRatio = this._tempoProvider ? this._tempoProvider() : 0;
+                const octaveUp = fillRatio > this._octaveShiftThreshold ? 2 : 1;
+
+                // Schedule as many steps as fit in the lookahead window (~120 ms)
+                const lookaheadMs = 120;
+                let scheduled = 0;
+
+                while (this._musicStep < this._musicStepCount && scheduled < 8) {
+                    const step = this._musicStep;
+                    const chordIdx = Math.floor(step / this._stepsPerChord);
+                    const stepInChord = step % this._stepsPerChord;
+                    const chord = this._chords[chordIdx];
+
+                    let when = (this._musicNextTime - this.ctx.currentTime) * 1000;
+                    if (when < 0) {
+                        this._musicNextTime = this.ctx.currentTime + 0.05;
+                        when = 50;
+                    }
+
+                    // -- Bass: pick a random pattern once per chord --
+                    if (stepInChord === 0 && this._bassPatterns[chordIdx] === undefined) {
+                        const weights = [4, 3, 2];   // root-only, root+octave, broken chord
+                        const total = weights.reduce((a, b) => a + b, 0);
+                        let r = Math.random() * total;
+                        let chosen = 0;
+                        for (let i = 0; i < weights.length; i++) {
+                            r -= weights[i];
+                            if (r <= 0) { chosen = i; break; }
+                        }
+                        this._bassPatterns[chordIdx] = chosen;
+                    }
+
+                    const bassPat = this._bassPatterns[chordIdx];
+
+                    if (bassPat === 0) {
+                        // Root only — two half-note hits
+                        if (stepInChord === 0 || stepInChord === 4) {
+                            this._note(chord.root,
+                                this._stepsPerChord / 2 * eighthSec * 1000,
+                                'triangle', 0.30, this.musicGain, when / 1000, true);
+                        }
+                    } else if (bassPat === 1) {
+                        // Root + octave below — two half-note hits
+                        if (stepInChord === 0 || stepInChord === 4) {
+                            const d = this._stepsPerChord / 2 * eighthSec * 1000;
+                            this._note(chord.root, d, 'triangle', 0.45, this.musicGain, when / 1000, true);
+                            this._note(chord.root / 2, d, 'triangle', 0.28, this.musicGain, when / 1000, true);
+                        }
+                    } else {
+                        // Chord — all 3 chord tones play simultaneously at step 0,
+                        // sustained for the first 4 steps (half the chord).
+                        if (stepInChord === 0 || stepInChord === 4) {
+                            const durMs = 3 * eighthSec * 1000;   // sustain across steps 0-3
+                            for (let i = 0; i < chord.bassChord.length; i++) {
+                                this._note(chord.bassChord[i],
+                                    durMs,
+                                    'triangle', 0.30, this.musicGain, when / 1000, true);
+                            }
+                        }
+                        // steps 4-7: rest (let the lead breathe)
+                    }
+
+                    // -- Lead: broken chord pattern (top→mid→bot, repeated) --
+                    // Pick (or reuse) a random arpeggio pattern for this chord
+                    if (stepInChord === 0 && !this._leadPatterns[chordIdx]) {
+                        const patterns = [
+                            [0, 1, 2, 0, 1, 2, 0, 1],  // top → bottom
+                            [2, 1, 0, 2, 1, 0, 2, 1],  // bottom → top
+                            [1, 0, 2, 1, 2, 0, 1, 0],  // middle-out
+                            [0, 2, 1, 0, 2, 1, 0, 2],  // top, bottom, mid (shuffle)
+                        ];
+                        const weights = [4, 4, 1, 1];  // top-down & bottom-up dominate
+                        const total = weights.reduce((a, b) => a + b, 0);
+                        let r = Math.random() * total;
+                        let chosen = 0;
+                        for (let i = 0; i < patterns.length; i++) {
+                            r -= weights[i];
+                            if (r <= 0) { chosen = i; break; }
+                        }
+                        this._leadPatterns[chordIdx] = patterns[chosen];
+                    }
+
+                    const leadIdx = this._leadPatterns[chordIdx][stepInChord];
+                    const leadFreq = chord.lead[leadIdx] * octaveUp;
+                    this._note(
+                        leadFreq,
+                        eighthSec * 1000 * 0.85,
+                        'square', 0.13,
+                        this.musicGain, when / 1000, true
+                    );
+
+                    this._musicStep++;
+                    this._musicNextTime += eighthSec;
+                    scheduled++;
+                }
+
+                // Loop back to the beginning
+                if (this._musicStep >= this._musicStepCount) {
+                    this._musicStep = 0;
+                    this._leadPatterns = [];          // ← fresh random picks next cycle
+                }
+
+                // Reschedule just before we run out of scheduled notes
+                const msUntilNext = (this._musicNextTime - this.ctx.currentTime) * 1000;
+                this._musicTimer = setTimeout(
+                    () => this._scheduleMusic(),
+                    Math.max(30, msUntilNext - 50)
+                );
+            }
+
+        }
+
+        // ========== Phaser Scene ==========
+        class Gravity2048Scene extends Phaser.Scene {
+            constructor() {
+                super({ key: 'Gravity2048' });
+                this.logic = new GameLogic();
+                this.audio = new ChiptuneAudio();
+                this._firstInteraction = false;
+                this.sprites = {};       // keyed by "x,y" (board) or "fx,y" (falling)
+                this.prevGrid = null;    // deep copy of grid after last render
+                this.prevFalling = [];   // falling piece cells from last render
+                this.cellSize = 0;
+                this.gap = 0;
+                this.boardOffsetX = 0;
+                this.boardOffsetY = 0;
+                this.fallEvent = null;
+                this.bombSprite = null;
+                this._swipeStartX = 0;
+                this._swipeStartY = 0;
+                this._swipeStartT = 0;
+                this._swiping = false;
+                this._secondTouch = null;   // for two-finger rotate-CCW
+            }
+
+            create() {
+                this.cellSize = Gravity2048Scene.cellSize;
+                this.gap = Gravity2048Scene.gap;
+                this.boardOffsetX = 0;
+                this.boardOffsetY = 0;
+
+                this.createBackgroundGrid();
+                this.buildTileTextures();
+                this.buildBombTexture();
+
+                // -- Inject Phaser-backed sleep into the logic --
+                this.logic.setSleep((ms) =>
+                    new Promise(resolve => this.time.delayedCall(ms, resolve))
+                );
+
+                // Register callbacks
+                this.logic.on('render', () => this.render());
+                this.logic.on('spawn', (type, value) => this.updateNextPreview(type, value));
+                this.logic.on('merge', (x, y, value) => this.animateMerge(x, y, value));
+                this.logic.on('clearRows', (rows) => this.animateClearRows(rows));
+                this.logic.on('scoreUpdated', (score) => this.updateScoreUI(score));
+                this.logic.on('bestUpdated', (best) => this.updateBestUI(best));
+                this.logic.on('gameOver', (score, best) => this.showGameOver(score, best));
+                this.logic.on('cascade', (count) => this.showMessage(count));
+                this.logic.on('startFall', () => this.startFallTimer());
+                this.logic.on('stopFall', () => this.stopFallTimer());
+                this.logic.on('gridReplaced', () => this.handleGridReplaced());
+                // Bomb callbacks
+                this.logic.on('bombStart', (x, y) => {
+                    this.showBombAt(x, y);
+                    this.updateBombUI();
+                });
+                this.logic.on('bombMove', (x, y) => {
+                    this.moveBombTo(x, y);
+                });
+                this.logic.on('bombLost', () => {
+                    this.hideBomb();
+                    this.showMessage('💣 Bomb lost!');
+                });
+                this.logic.on('bombInvalid', (x, y) => {
+                    this.showMessage('❌ Cell occupied!');
+                });
+                this.logic.on('bombExplode', (x, y, rows) => {
+                    this.hideBomb();
+                    this.animateBombExplosion(x, y, rows);
+                });
+                this.logic.on('bombPlaced', (x, y, rowCount) => {
+                    this.showMessage(`💣 Bomb cleared ${rowCount} row${rowCount > 1 ? 's' : ''}!`);
+                });
+                this.logic.on('bombEarned', (label) => {
+                    this.showMessage(`💣 Bomb earned! (reached ${label})`);
+                });
+                this.logic.on('bombCount', () => {
+                    this.updateBombUI();
+                });
+                this.logic.on('bombHintUpdate', (hint) => {
+                    const el = document.getElementById('bombHint');
+                    if (el) el.textContent = hint === '—' ? 'All bombs earned' : `Next: ${hint}`;
+                });
+
+                // -- Audio hooks --
+                this.logic.on('merge', (x, y, value) => this.audio.playMerge(value));
+                this.logic.on('clearRows', (rows) => this.audio.playClear(rows.length));
+                this.logic.on('cascade', () => this.audio.playCascade());
+                this.logic.on('gameOver', () => this.audio.playGameOver());
+                this.logic.on('spawn', () => this.audio.playSpawn());
+                this.logic.on('startMusic', () => {
+                    if (this.audio.musicEnabled) this.audio.startMusic();
+                });
+                this.logic.on('stopMusic', () => this.audio.stopMusic());
+                this.logic.on('bombStart', () => this.audio.playBombStart());
+                this.logic.on('bombMove', () => this.audio.playBombMove());
+                this.logic.on('bombExplode', () => this.audio.playBombExplode());
+                this.logic.on('bombLost', () => this.audio.playBombLost());
+                this.logic.on('bombEarned', () => this.audio.playBombEarned());
+
+                // Let the audio read board fill for dynamic tempo
+                this.audio._setTempoProvider(() => {
+                    let filled = 0;
+                    const g = this.logic.grid;
+                    if (!g) return 0;
+                    for (let y = 0; y < BOARD_HEIGHT; y++)
+                        for (let x = 0; x < BOARD_WIDTH; x++)
+                            if (g[y][x] !== null) filled++;
+                    return filled / (BOARD_WIDTH * BOARD_HEIGHT);
+                });
+
+                // Input
+                this.input.keyboard.on('keydown', (e) => this.handleKeyPress(e));
+
+                // ---- Touch / swipe input ----
+                // Ensure we have at least 2 pointer slots for multi-touch
+                this.input.addPointer(1);
+
+                this.input.on('pointerdown', (pointer) => {
+                    // First interaction → unlock AudioContext (same as keyboard path)
+                    if (!this._firstInteraction) {
+                        this._firstInteraction = true;
+                        this.audio._init();
+                    }
+
+                    if (pointer.wasTouch || true) {          // treat mouse drags the same way
+                        this._swipeStartX = pointer.x;
+                        this._swipeStartY = pointer.y;
+                        this._swipeStartT = this.game.loop.now;
+                        this._swiping = true;
+
+                        // Track a possible second touch (two-finger → rotate CCW)
+                        if (!this._secondTouch && this.input.pointer1 !== pointer
+                            && this.input.pointer2 && this.input.pointer2.isDown) {
+                            this._secondTouch = pointer;
+                        }
+                    }
+                });
+
+                this.input.on('pointerup', (pointer) => {
+                    if (!this._swiping) return;
+                    this._swiping = false;
+
+                    const dx = pointer.x - this._swipeStartX;
+                    const dy = pointer.y - this._swipeStartY;
+                    const dt = this.game.loop.now - this._swipeStartT;
+                    const dist = Math.hypot(dx, dy);
+
+                    // Two-finger tap → rotate counter-clockwise
+                    if (this._secondTouch) {
+                        this._secondTouch = null;
+                        if (dist < SWIPE_MIN_DISTANCE) {
+                            if (this.logic.bombActive) {
+                                this.logic.moveBomb(0, -1);          // up in bomb mode
+                            } else if (this.logic.rotate(-1)) {
+                                this.audio.playRotate();
+                            }
+                        }
+                        return;
+                    }
+
+                    if (dist < SWIPE_MIN_DISTANCE) return;           // too short – treat as tap
+
+                    // --- Decide direction ---
+                    const horizontal = Math.abs(dx) > Math.abs(dy) * SWIPE_RATIO;
+                    const vertical = !horizontal;
+
+                    if (this.logic.bombActive) {
+                        // ---- Bomb mode gestures ----
+                        if (horizontal && dx < 0) this.logic.moveBomb(-1, 0);
+                        else if (horizontal && dx > 0) this.logic.moveBomb(1, 0);
+                        else if (vertical && dy < 0) this.logic.moveBomb(0, -1);
+                        else if (vertical && dy > 0) this.logic.moveBomb(0, 1);
+                        return;
+                    }
+
+                    // ---- Normal piece mode ----
+                    if (horizontal && dx < 0) {
+                        if (this.logic.move(-1, 0)) this.audio.playMove();
+                    } else if (horizontal && dx > 0) {
+                        if (this.logic.move(1, 0)) this.audio.playMove();
+                    }
+                    else if (vertical && dy < 0) {
+                        // Up-swipe → rotate clockwise (same as ↑ / X)
+                        if (this.logic.rotate(1)) this.audio.playRotate();
+                    }
+                    else if (vertical && dy > 0) {
+                        // Down-swipe:
+                        //   quick & long  → hard drop (same as Space)
+                        //   slow / short  → soft drop (one step, same as ↓)
+                        const isHardDrop = dist > SWIPE_MIN_DISTANCE * 2 && dt < SWIPE_MAX_TIME;
+                        if (isHardDrop) {
+                            this.logic.hardDrop();
+                            this.audio.playHardDrop();
+                        } else {
+                            const moved = this.logic.move(0, 1);
+                            if (moved) this.audio.playSoftDrop();
+                        }
+                    }
+                });
+
+                // Start game
+                this.logic.newGame();
+                this.updateScoreUI(this.logic.score);
+                this.updateBestUI(this.logic.best);
+                this.updateBombUI();
+
+                // -- Audio buttons --
+                const sfxBtn = document.getElementById('sfxBtn');
+                const musicBtn = document.getElementById('musicBtn');
+                sfxBtn.addEventListener('click', () => {
+                    this.audio._init();
+                    this.audio.sfxEnabled = !this.audio.sfxEnabled;
+                    sfxBtn.classList.toggle('active', this.audio.sfxEnabled);
+                });
+                musicBtn.addEventListener('click', () => {
+                    const on = this.audio.toggleMusic();
+                    musicBtn.classList.toggle('active', on);
+                });
+            }
+
+            // ----------------------------------------------
+            // Phaser-driven fall timer
+            // ----------------------------------------------
+            startFallTimer() {
+                this.stopFallTimer();
+                const interval = this.logic.getFallInterval();
+                this.fallEvent = this.time.addEvent({
+                    delay: interval,
+                    callback: this.fallTick,
+                    callbackScope: this,
+                    repeat: -1
+                });
+            }
+
+            stopFallTimer() {
+                if (this.fallEvent) {
+                    this.fallEvent.remove();
+                    this.fallEvent = null;
+                }
+            }
+
+            fallTick() {
+                if (this.paused) return;
+                if (!this.logic.running || !this.logic.current) {
+                    this.stopFallTimer();
+                    return;
+                }
+                if (this.logic.bombActive) return; // bomb is active, don't move the piece
+                if (!this.logic.tryMove(0, 1)) {
+                    this.logic.lockCurrent();       // lockCurrent will stop/restart the timer
+                } else {
+                    this.logic.emit('render');
+                }
+            }
+
+            buildTileTextures() {
+                const pad = 2;
+                const size = this.cellSize;
+                const inner = size - pad * 2;
+                const radius = 4;
+
+                const values = Object.keys(TILE_COLORS).map(Number);
+
+                for (const val of values) {
+                    const color = TILE_COLORS[val];
+                    const textColor = val >= 64 ? '#ffffff' : '#111111';
+                    const str = String(val);
+
+                    // Font sizing — match original: clamp(12, cell * 0.45, 22)
+                    const fontPx = Math.min(22, Math.max(12, Math.round(this.cellSize * 0.45)));
+
+                    const rt = this.make.renderTexture({
+                        width: this.cellSize, height: this.cellSize
+                    });
+
+                    // -- Background --
+                    const gfx = this.make.graphics({ x: 0, y: 0, add: false });
+                    gfx.fillStyle(color, 1);
+                    gfx.fillRoundedRect(pad, pad, inner, inner, radius);
+                    const outlineColor = val >= 64 ? 0xffffff : 0xffff26;
+                    gfx.lineStyle(3, outlineColor, 1);
+                    gfx.strokeRoundedRect(pad, pad, inner, inner, radius);
+                    rt.draw(gfx, 0, 0);
+
+                    // -- Number --
+                    const textStyle = {
+                        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+                        fontSize: `${fontPx}px`,
+                        fontStyle: 'bold',
+                        color: textColor,
+                        align: 'center',
+                    };
+
+                    const txt = this.make.text({ x: 0, y: 0, text: str, style: textStyle });
+                    txt.setOrigin(0.5, 0.5);
+                    txt.setPosition(this.cellSize / 2, this.cellSize / 2);
+                    rt.draw(txt);
+
+                    // -- Save & clean up --
+                    rt.render();
+                    txt.destroy();
+                    gfx.destroy();
+                    rt.saveTexture(`tile-${val}`);
+                    rt.destroy();
+                }
+            }
+
+            buildBombTexture() {
+                const pad = 2;
+                const size = this.cellSize;
+                const inner = size - pad * 2;
+                const radius = 4;
+
+                const rt = this.make.renderTexture({
+                    width: this.cellSize, height: this.cellSize
+                });
+
+                const gfx = this.make.graphics({ x: 0, y: 0, add: false });
+                gfx.lineStyle(3, 0xffff00, 0.8);
+                gfx.strokeRoundedRect(pad, pad, inner, inner, radius);
+                gfx.fillStyle(BOMB_COLOR, 1);
+                gfx.fillRoundedRect(pad + 2, pad + 2, inner - 4, inner - 4, radius - 1);
+                rt.draw(gfx, 0, 0);
+
+
+                const fontPx = Math.min(24, Math.max(14, Math.round(this.cellSize * 0.55)));
+                const textStyle = {
+                    fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+                    fontSize: `${fontPx}px`,
+                    fontStyle: 'bold',
+                    color: BOMB_TEXT_COLOR,
+                    align: 'center',
+                };
+                const txt = this.make.text({ x: 0, y: 0, text: '💣', style: textStyle });
+                txt.setOrigin(0.5, 0.5);
+                txt.setPosition(this.cellSize / 2, this.cellSize / 2);
+                rt.draw(txt);
+
+
+                rt.render();
+                gfx.destroy();
+                txt.destroy();
+                rt.saveTexture('tile-bomb');
+                rt.destroy();
+            }
+
+
+            handleKeyPress(event) {
+                const key = event.key.toLowerCase();
+                if (!this._firstInteraction) { this._firstInteraction = true; this.audio._init(); }
+
+                if (key === 'p') {
+                    this.togglePause();
+                    return;
+                }
+                if (this.paused) return;
+
+                const gameKeys = ['arrowleft', 'arrowright', 'arrowdown', 'arrowup', ' ', 'x', 'z', 'r', 'b'];
+                const arrowKeys = ['arrowleft', 'arrowright', 'arrowdown'];
+                if (gameKeys.includes(key)) {
+                    event.preventDefault();
+                }
+
+                if (!arrowKeys.includes(key) && event.repeat) return;
+
+                // ---- Bomb mode: route keys to the bomb instead of the piece ----
+                if (this.logic.bombActive) {
+                    if (key === 'arrowleft') { this.logic.moveBomb(-1, 0); }
+                    else if (key === 'arrowright') { this.logic.moveBomb(1, 0); }
+                    else if (key === 'arrowdown') { this.logic.moveBomb(0, 1); }
+                    else if (key === 'arrowup' || key === 'x') { this.logic.moveBomb(0, -1); }
+                    else if (key === ' ') { this.logic.placeBomb(); }
+                    return;
+                }
+
+                // ---- Normal piece mode ----
+                if (key === 'b') {
+                    if (this.logic.startBomb()) {
+                        // bomb activated
+                    }
+                    return;
+                }
+                if (key === 'arrowleft') { this.logic.move(-1, 0); this.audio.playMove(); }
+                else if (key === 'arrowright') { this.logic.move(1, 0); this.audio.playMove(); }
+                else if (key === 'arrowdown') {
+                    const moved = this.logic.move(0, 1); if (moved)
+                        this.audio.playSoftDrop();
+                }
+                else if (key === 'arrowup' || key === 'x') { if (this.logic.rotate(1)) this.audio.playRotate(); }
+                else if (key === 'z') { if (this.logic.rotate(-1)) this.audio.playRotate(); }
+                else if (key === ' ') { this.logic.hardDrop(); this.audio.playHardDrop(); }
+                else if (key === 'r') {
+                    document.getElementById('gameover').classList.remove('show');
+                    const titleBox = document.getElementById('titleDisplay');
+                    titleBox.classList.remove('show-msg');
+                    this.hideBomb();
+                    this.handleGridReplaced();
+                    this.logic.newGame();
+                }
+            }
+
+
+            togglePause() {
+                if (!this.logic.running) return;
+                if (this.paused) {
+                    this.paused = false;
+                    this.audio.resume();
+                    this.audio.playPause(true);
+                    this.logic.emit('startFall');
+                    document.getElementById('paused').classList.remove('show');
+                }
+                else {
+                    this.paused = true;
+                    this.audio.playPause(false);
+                    this.audio.suspend();
+                    this.logic.emit('stopFall');
+                    document.getElementById('paused').classList.add('show');
+                }
+            }
+
+            handleGridReplaced() {
+                // Kill any in-flight tweens (clear-shrink, merge-pulse) so we don't
+                // leave orphaned targets.
+                for (const s of Object.values(this.sprites))
+                    if (s && !s.destroyed) this.tweens.killTweensOf(s);
+
+                // Destroy every tracked sprite (board + falling).
+                for (const key of Object.keys(this.sprites)) {
+                    const s = this.sprites[key];
+                    if (s && !s.destroyed) {
+                        s.destroy();
+                    }
+                    delete this.sprites[key];
+                }
+
+                // Invalidate the diff cache → next render() redraws the entire board.
+                this.prevGrid = null;
+                this.prevFalling = [];
+                this.hideBomb();
+            }
+
+            // ========== Bomb Rendering ==========
+
+            showBombAt(x, y) {
+                this.hideBomb();
+                const posX = this.boardOffsetX + x * (this.cellSize + this.gap) + this.cellSize / 2;
+                const posY = this.boardOffsetY + y * (this.cellSize + this.gap) + this.cellSize / 2;
+                this.bombSprite = this.add.image(posX, posY, 'tile-bomb');
+                this.bombSprite.setDepth(3);
+                this.bombSprite.setAlpha(0.9);
+                // Pulsing animation
                 this.tweens.add({
-                    targets: img,
-                    scale: 0.2,
-                    alpha: 0,
-                    duration: ANIMATION_TIMINGS.CLEAR,
-                    ease: 'Quad.easeIn',
-                    onComplete: () => {
-                        if (!img.destroyed) img.destroy();
-                        // Now that the object is gone, drop the bookkeeping entry.
-                        delete this.sprites[key];
+                    targets: this.bombSprite,
+                    scale: 1.1,
+                    duration: 400,
+                    yoyo: true,
+                    repeat: -1
+                });
+            }
+
+            moveBombTo(x, y) {
+                if (!this.bombSprite) return;
+                const posX = this.boardOffsetX + x * (this.cellSize + this.gap) + this.cellSize / 2;
+                const posY = this.boardOffsetY + y * (this.cellSize + this.gap) + this.cellSize / 2;
+                this.tweens.killTweensOf(this.bombSprite);
+                this.tweens.add({
+                    targets: this.bombSprite,
+                    x: posX,
+                    y: posY,
+                    duration: 60
+                });
+                // Resume pulse
+                this.time.delayedCall(70, () => {
+                    if (this.bombSprite && !this.bombSprite.destroyed) {
+                        this.tweens.add({
+                            targets: this.bombSprite,
+                            scale: 1.1,
+                            duration: 400,
+                            yoyo: true,
+                            repeat: -1
+                        });
                     }
                 });
             }
-        });
-    }
+
+            hideBomb() {
+                if (this.bombSprite && !this.bombSprite.destroyed) {
+                    this.tweens.killTweensOf(this.bombSprite);
+                    this.bombSprite.destroy();
+                }
+                this.bombSprite = null;
+            }
+
+            animateBombExplosion(x, y, rows) {
+                // Flash the bomb sprite before hiding
+                const posX = this.boardOffsetX + x * (this.cellSize + this.gap) + this.cellSize / 2;
+                const posY = this.boardOffsetY + y * (this.cellSize + this.gap) + this.cellSize / 2;
+                const flash = this.add.image(posX, posY, 'tile-bomb');
+                flash.setDepth(4);
+                flash.setScale(0.5);
+                this.tweens.add({
+                    targets: flash,
+                    scale: 3,
+                    alpha: 0,
+                    duration: ANIMATION_TIMINGS.BOMB_EXPLODE,
+                    ease: 'Quad.easeOut',
+                    onComplete: () => flash.destroy()
+                });
+            }
+
+            updateBombUI() {
+                const countEl = document.getElementById('bombCount');
+                if (countEl) countEl.textContent = this.logic.bombsAvailable;
+                const counterEl = document.getElementById('bombCounter');
+                if (counterEl) {
+                    counterEl.style.opacity = this.logic.bombsAvailable > 0 ? '1' : '0.5';
+                }
+            }
+
+            // Called once (and on resize). Draws the static background texture.
+            createBackgroundGrid() {
+                const gap = this.gap;
+                const boardWidth = this.cellSize * BOARD_WIDTH + (BOARD_WIDTH - 1) * gap;
+                const boardHeight = this.cellSize * BOARD_HEIGHT + (BOARD_HEIGHT - 1) * gap;
+
+                if (this.textures.exists('gridBg')) this.textures.remove('gridBg');
+                const graphics = this.make.graphics({ x: 0, y: 0, add: false });
+                graphics.fillStyle(0x0e1118, 1);
+                graphics.fillRect(0, 0, boardWidth, boardHeight);
+                for (let y = 0; y < BOARD_HEIGHT; y++) {
+                    for (let x = 0; x < BOARD_WIDTH; x++) {
+                        const px = x * (this.cellSize + gap);
+                        const py = y * (this.cellSize + gap);
+                        graphics.fillStyle(0x171b24, 1);
+                        graphics.fillRoundedRect(px, py, this.cellSize, this.cellSize, 8);
+                        graphics.lineStyle(1, 0x242a37, 1);
+                        graphics.strokeRoundedRect(px, py, this.cellSize, this.cellSize, 8);
+                    }
+                }
+                graphics.generateTexture('gridBg', boardWidth, boardHeight);
+                graphics.destroy();
+
+                if (this.bgImage) this.bgImage.destroy();
+                this.bgImage = this.add.image(0, 0, 'gridBg').setOrigin(0, 0).setDepth(-1);
+            }
+
+            // Destroy and remove a single sprite pair by key.
+            _destroySprite(key) {
+                const s = this.sprites[key];
+                if (!s) return;
+                this.tweens.killTweensOf(s);
+                s.setVisible(false);
+                s.destroy();
+                delete this.sprites[key];
+            }
+
+            render() {
+                const curGrid = this.logic.grid;
+                const prevGrid = this.prevGrid;
+                const curFalling = this.logic.current
+                    ? this.logic.cells(this.logic.current).map(([x, y]) => `${x},${y}`)
+                    : [];
+
+                // --- Board cells: only update what changed ---
+                for (let y = 0; y < BOARD_HEIGHT; y++) {
+                    for (let x = 0; x < BOARD_WIDTH; x++) {
+                        const cur = curGrid[y][x];
+                        const prev = prevGrid ? prevGrid[y][x] : undefined;
+                        if (cur === prev) continue;
+                        const key = `${x},${y}`;
+                        this._destroySprite(key);
+                        if (cur !== null) this.drawTile(x, y, cur);
+                    }
+                }
+
+                // --- Falling piece: clear old positions, draw new ones ---
+                for (const key of this.prevFalling) {
+                    this._destroySprite(`f${key}`);
+                }
+                for (const key of curFalling) {
+                    this.drawTile(...key.split(',').map(Number), this.logic.current.value, true, 'f');
+                }
+
+                // Safety: make sure every non-null cell has a sprite.
+                // Catches any edge case where a sprite was removed externally
+                // (e.g., by an animation) but the diff didn't notice.
+                for (let y = 0; y < BOARD_HEIGHT; y++) {
+                    for (let x = 0; x < BOARD_WIDTH; x++) {
+                        const key = `${x},${y}`;
+                        if (curGrid[y][x] !== null && !this.sprites[key]) {
+                            this.drawTile(x, y, curGrid[y][x]);
+                        }
+                    }
+                }
+
+                // Snapshot grid for next diff (shallow row copy is enough — values are primitives)
+                this.prevGrid = curGrid.map(row => row.slice());
+                this.prevFalling = curFalling;
+            }
+
+            drawTile(x, y, value, isFalling = false, keyPrefix = '') {
+                const posX = this.boardOffsetX + x * (this.cellSize + this.gap);
+                const posY = this.boardOffsetY + y * (this.cellSize + this.gap);
+
+                const texName = `tile-${TILE_COLORS[value] ? value : 4096}`;  // fallback for values beyond 4096
+
+                const img = this.add.image(
+                    posX + this.cellSize / 2,
+                    posY + this.cellSize / 2,
+                    texName
+                );
+                img.setDepth(isFalling ? 2 : 1);
+                if (isFalling) img.setAlpha(0.8);
+
+                this.sprites[`${keyPrefix}${x},${y}`] = img;
+            }
+
+            animateMerge(x, y, value) {
+                const key = `${x},${y}`;
+                const img = this.sprites[key];
+                if (!img) return;
+                this.tweens.add({
+                    targets: img,
+                    scale: 1.15,
+                    duration: ANIMATION_TIMINGS.MERGE,
+                    yoyo: true
+                });
+            }
+
+            animateClearRows(rows) {
+                rows.forEach(y => {
+                    for (let x = 0; x < BOARD_WIDTH; x++) {
+                        const key = `${x},${y}`;
+                        const img = this.sprites[key];
+                        if (!img) continue;
+
+                        // Do NOT delete from this.sprites here.
+                        // The entry stays until the object is actually destroyed.
+                        this.tweens.add({
+                            targets: img,
+                            scale: 0.2,
+                            alpha: 0,
+                            duration: ANIMATION_TIMINGS.CLEAR,
+                            ease: 'Quad.easeIn',
+                            onComplete: () => {
+                                if (!img.destroyed) img.destroy();
+                                // Now that the object is gone, drop the bookkeeping entry.
+                                delete this.sprites[key];
+                            }
+                        });
+                    }
+                });
+            }
 
 
-    updateNextPreview(type, value) {
-        const nextEl = document.querySelector('.next');
-        const blockEl = document.getElementById('nextBlock');
-        nextEl.innerHTML = '';
-        nextEl.appendChild(blockEl);
+            updateNextPreview(type, value) {
+                const blockEl = document.getElementById('nextBlock');
+                // Remove any old preview cells + label, keep the container
+                blockEl.innerHTML = '';
+                const nextEl = blockEl.parentElement;
+                const oldLabel = nextEl.querySelector('.preview-value');
+                if (oldLabel) oldLabel.remove();
 
-        blockEl.innerHTML = '';
-        for (const [x, y] of SHAPES[type]) {
-            const cell = document.createElement('div');
-            cell.className = 'preview-cell';
-            cell.style.gridColumn = x + 1;
-            cell.style.gridRow = y + 1;
-            blockEl.appendChild(cell);
+                for (const [x, y] of SHAPES[type]) {
+                    const cell = document.createElement('div');
+                    cell.className = 'preview-cell';
+                    cell.style.gridColumn = x + 1;
+                    cell.style.gridRow = y + 1;
+                    blockEl.appendChild(cell);
+                }
+                const label = document.createElement('div');
+                label.className = 'preview-value';
+                label.textContent = value;
+                nextEl.appendChild(label);
+            }
+
+            updateScoreUI(score) {
+                document.getElementById('score').textContent = score.toLocaleString();
+            }
+
+            updateBestUI(best) {
+                document.getElementById('best').textContent = best.toLocaleString();
+            }
+
+            showGameOver(score, best) {
+                const overlay = document.getElementById('gameover');
+                document.getElementById('finalText').innerHTML = `Final Score: ${score.toLocaleString()}<br><hr>Best: ${best.toLocaleString()}`;
+                overlay.classList.add('show');
+            }
+
+            showMessage(label) {
+                const titleBox = document.getElementById('titleDisplay');
+                const msgText = titleBox.querySelector('.msg-text');
+                msgText.textContent = label;
+                titleBox.classList.add('show-msg');
+
+                if (this._cascadeTimer) this._cascadeTimer.remove();
+                this._cascadeTimer = this.time.delayedCall(ANIMATION_TIMINGS.CASCADE_MESSAGE, () => {
+                    titleBox.classList.remove('show-msg');
+                    this._cascadeTimer = null;
+                });
+            }
         }
-        const label = document.createElement('div');
-        label.className = 'preview-value';
-        label.textContent = value;
-        nextEl.appendChild(label);
-    }
 
-    updateScoreUI(score) {
-        document.getElementById('score').textContent = score.toLocaleString();
-    }
+        // ========== Phaser Config ==========
+        (function () {
+            // Read actual rendered cell size the same way the original does:
+            // inject a temporary element, measure it, then remove it.
+            const probe = document.createElement('div');
+            probe.style.cssText = 'position:absolute;visibility:hidden;width:var(--cell);height:var(--cell)';
+            document.body.appendChild(probe);
+            const cell = probe.offsetWidth || 40;
+            const gap = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gap')) || 4;
+            document.body.removeChild(probe);
 
-    updateBestUI(best) {
-        document.getElementById('best').textContent = best.toLocaleString();
-    }
+            Gravity2048Scene.cellSize = cell;
+            Gravity2048Scene.gap = gap;
+            Gravity2048Scene.boardWidth = cell * BOARD_WIDTH + (BOARD_WIDTH - 1) * gap;
+            Gravity2048Scene.boardHeight = cell * BOARD_HEIGHT + (BOARD_HEIGHT - 1) * gap;
+        })();
 
-    showGameOver(score, best) {
-        const overlay = document.getElementById('gameover');
-        document.getElementById('finalText').innerHTML = `Final Score: ${score.toLocaleString()}<br><hr>Best: ${best.toLocaleString()}`;
-        overlay.classList.add('show');
-    }
+        const config = {
+            type: Phaser.AUTO,
+            parent: 'game',
+            width: Gravity2048Scene.boardWidth,
+            height: Gravity2048Scene.boardHeight,
+            scene: Gravity2048Scene,
+            render: {
+                pixelArt: false,
+                antialias: true,
+                roundPixels: true
+            }
+        };
 
-    showCascadeMessage(label) {
-        if (this._cascadeTimer) this._cascadeTimer.remove();
-        const messageEl = document.getElementById('message');
-        messageEl.textContent = label;
-        this._cascadeTimer = this.time.delayedCall(ANIMATION_TIMINGS.CASCADE_MESSAGE, () => {
-            messageEl.textContent = '';
-            this._cascadeTimer = null;
-        });
-    }
-}
+        const game = new Phaser.Game(config);
 
-// ========== Phaser Config ==========
-(function () {
-    // Read actual rendered cell size the same way the original does:
-    // inject a temporary element, measure it, then remove it.
-    const probe = document.createElement('div');
-    probe.style.cssText = 'position:absolute;visibility:hidden;width:var(--cell);height:var(--cell)';
-    document.body.appendChild(probe);
-    const cell = probe.offsetWidth || 40;
-    const gap = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gap')) || 4;
-    document.body.removeChild(probe);
-
-    Gravity2048Scene.cellSize = cell;
-    Gravity2048Scene.gap = gap;
-    Gravity2048Scene.boardWidth  = cell * BOARD_WIDTH  + (BOARD_WIDTH  - 1) * gap;
-    Gravity2048Scene.boardHeight = cell * BOARD_HEIGHT + (BOARD_HEIGHT - 1) * gap;
-})();
-
-const config = {
-    type: Phaser.AUTO,
-    parent: 'game',
-    width: Gravity2048Scene.boardWidth,
-    height: Gravity2048Scene.boardHeight,
-    scene: Gravity2048Scene,
-    render: {
-        pixelArt: false,
-        antialias: true
-    }
-};
-
-const game = new Phaser.Game(config);
-
-function restartGame() {
-    document.getElementById('gameover').classList.remove('show');
-    document.getElementById('message').textContent = '';
-    const scene = game.scene.scenes[0];
-    scene.handleGridReplaced();  // clear any existing sprites and diff cache
-    scene.logic.newGame();
-}
-
-document.getElementById('restart').addEventListener('click', restartGame);
-document.getElementById('restartOverlay').addEventListener('click', restartGame);
-document.getElementById('resumeBtn').addEventListener('click', () => game.scene.scenes[0].togglePause());
-
-// ========== Responsive Resize Handling ==========
-let resizeTimer = null;
-
-function measureCellAndGap() {
-    const probe = document.createElement('div');
-    probe.style.cssText =
-        'position:absolute;visibility:hidden;width:var(--cell);height:var(--cell);';
-    document.body.appendChild(probe);
-    const cell = probe.offsetWidth || 40;
-    const gap = parseInt(
-        getComputedStyle(document.documentElement).getPropertyValue('--gap'), 10
-    ) || 4;
-    document.body.removeChild(probe);
-    return { cell, gap };
-}
-
-function handleResize() {
-    const { cell, gap } = measureCellAndGap();
-
-    const newBoardW = cell * BOARD_WIDTH  + (BOARD_WIDTH  - 1) * gap;
-    const newBoardH = cell * BOARD_HEIGHT + (BOARD_HEIGHT - 1) * gap;
-
-    // Bail out if nothing actually changed
-    const scene = game.scene.scenes[0];
-    if (!scene) return;
-    if (cell === scene.cellSize && gap === scene.gap) return;
-
-    // Update static + instance properties
-    Gravity2048Scene.cellSize   = cell;
-    Gravity2048Scene.gap        = gap;
-    Gravity2048Scene.boardWidth  = newBoardW;
-    Gravity2048Scene.boardHeight = newBoardH;
-    scene.cellSize = cell;
-    scene.gap      = gap;
-
-    // Resize the Phaser canvas
-    game.scale.resize(newBoardW, newBoardH);
-
-    // Invalidate the cached grid background so it regenerates at the new size
-    scene.createBackgroundGrid();
-    scene.buildTileTextures();
-
-    // Reset diff state so next render redraws everything
-    scene.tweens.killAll();
-    Object.values(scene.sprites).forEach(s => {
-        if (!s.destroyed) {
-            s.setVisible(false);
-            s.destroy();
+        function restartGame() {
+            document.getElementById('gameover').classList.remove('show');
+            const titleBox = document.getElementById('titleDisplay');
+            titleBox.classList.remove('show-msg');
+            const scene = game.scene.scenes[0];
+            scene.hideBomb();
+            scene.handleGridReplaced();  // clear any existing sprites and diff cache
+            scene.logic.newGame();
         }
-    });
-    scene.sprites = {};
-    scene.prevGrid = null;
-    scene.prevFalling = [];
 
-    // Full re-render (repositions every tile at the new cell size)
-    scene.render();
-}
+        document.getElementById('restart').addEventListener('click', restartGame);
+        document.getElementById('restartOverlay').addEventListener('click', restartGame);
+        document.getElementById('resumeBtn').addEventListener('click', () => game.scene.scenes[0].togglePause());
 
-const ro = new ResizeObserver(() => {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(handleResize, 150);
-});
-ro.observe(document.body);
-</script>
+        // ========== Responsive Resize Handling ==========
+        let resizeTimer = null;
+
+        function measureCellAndGap() {
+            const probe = document.createElement('div');
+            probe.style.cssText =
+                'position:absolute;visibility:hidden;width:var(--cell);height:var(--cell);';
+            document.body.appendChild(probe);
+            const cell = probe.offsetWidth || 40;
+            const gap = parseInt(
+                getComputedStyle(document.documentElement).getPropertyValue('--gap'), 10
+            ) || 4;
+            document.body.removeChild(probe);
+            return { cell, gap };
+        }
+
+        function handleResize() {
+            const { cell, gap } = measureCellAndGap();
+
+            const newBoardW = cell * BOARD_WIDTH + (BOARD_WIDTH - 1) * gap;
+            const newBoardH = cell * BOARD_HEIGHT + (BOARD_HEIGHT - 1) * gap;
+
+            // Bail out if nothing actually changed
+            const scene = game.scene.scenes[0];
+            if (!scene) return;
+            if (cell === scene.cellSize && gap === scene.gap) return;
+
+            // Update static + instance properties
+            Gravity2048Scene.cellSize = cell;
+            Gravity2048Scene.gap = gap;
+            Gravity2048Scene.boardWidth = newBoardW;
+            Gravity2048Scene.boardHeight = newBoardH;
+            scene.cellSize = cell;
+            scene.gap = gap;
+
+            // Resize the Phaser canvas
+            game.scale.resize(newBoardW, newBoardH);
+
+            // Invalidate the cached grid background so it regenerates at the new size
+            scene.createBackgroundGrid();
+            scene.buildTileTextures();
+            scene.buildBombTexture();
+            scene.hideBomb();
+            // Reset diff state so next render redraws everything
+            scene.tweens.killAll();
+            Object.values(scene.sprites).forEach(s => {
+                if (!s.destroyed) {
+                    s.setVisible(false);
+                    s.destroy();
+                }
+            });
+            scene.sprites = {};
+            scene.prevGrid = null;
+            scene.prevFalling = [];
+
+            // Full re-render (repositions every tile at the new cell size)
+            scene.render();
+        }
+
+        const ro = new ResizeObserver(() => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(handleResize, 150);
+        });
+        ro.observe(document.body);
+    </script>
 </body>
+
 </html>
