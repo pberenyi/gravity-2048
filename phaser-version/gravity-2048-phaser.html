@@ -9,7 +9,11 @@
     <style>
         :root {
             --gap: 4px;
-            --cell: clamp(24px, min(calc((100dvh - 192px - 19 * var(--gap)) / 20), calc((100vw - 280px - 22px) / 10)), 58px);
+            --side-w: clamp(150px, 20vw, 210px);   /* side panel width — scales with viewport */
+            --cell: clamp(18px,
+                min(calc((100dvh - 132px - 19 * var(--gap)) / 20),
+                    calc((100vw - var(--side-w) - 72px) / 10)),
+                64px);
             --board-w: 10;
             --board-h: 20;
             --bg: #11131a;
@@ -42,7 +46,7 @@
 
         header {
             display: flex;
-            justify-content: space-between;
+            justify-content: center;
             align-items: end;
             gap: 20px;
             margin-bottom: 18px;
@@ -129,10 +133,6 @@
             transition: opacity 0.25s ease;
         }
 
-        .title-box.show-msg .msg-text {
-            opacity: 1;
-        }
-
         /* ---- Make cascade / event messages more visible ---- */
         .title-box.show-msg .msg-text {
             font-size: 22px;
@@ -144,6 +144,7 @@
             animation: msgPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
             background: rgba(125, 211, 252, 0.10);
             border-radius: 8px;
+            opacity: 1;
         }
 
         @keyframes msgPop {
@@ -175,12 +176,6 @@
             align-items: flex-start;
         }
 
-        header {
-            display: flex;
-            justify-content: center;
-            margin-bottom: 18px;
-        }
-
         .board-wrap {
             position: relative;
             padding: 9px;
@@ -199,7 +194,8 @@
         }
 
         .side {
-            width: 205px;
+            width: var(--side-w);
+            flex: 0 0 var(--side-w);
             background: var(--panel);
             border: 1px solid #303747;
             border-radius: 15px;
